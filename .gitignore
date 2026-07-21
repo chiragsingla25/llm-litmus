@@ -222,6 +222,7 @@ node_modules/
 .next/
 out/
 npm-debug.log*
+*.tsbuildinfo
 
 # run.sh runtime artifacts
 backend/.venv/
