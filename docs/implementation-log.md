@@ -177,3 +177,24 @@ VS Code's extension only needs `ipykernel`, not a full `jupyterlab`/`notebook` s
 `backend/app/__init__.py` both from repo root and from inside `notebooks/` with zero path
 manipulation — confirms the fix is real, not just working by accident from one directory.
 `uv run pytest` still 5/5 passing — no regression from the build-system change.
+
+## Step 10 — `notebooks/provider_walkthrough.ipynb`
+
+One notebook (per user's explicit preference over several small ones), five markdown-titled
+sections run top to bottom: **Setup** (direct `from app.core... import ...`, no path
+manipulation — relies on Step 9's editable install), **Check Ollama is reachable** (prints
+`settings.OLLAMA_BASE_URL`, hits `/api/tags`, lists locally pulled models), **Generate a
+response**, **Speed test**, and **Error handling** (both `OllamaUnreachableError` — bad base
+URL — and `OllamaModelNotFoundError` — nonexistent model). Uses top-level `await` (ipykernel
+supports this natively) rather than `asyncio.run(...)`, since that's the idiomatic notebook
+style, not the plain-script style used in `backend/tests/test_providers.py`.
+
+Committed with empty outputs — it's a template for the user to run themselves, not a snapshot of
+one run. Before committing, extracted the exact cell code into an equivalent script and ran it
+for real against the local Ollama instance (`llama3.2:latest`) to confirm every section actually
+works: real generation output, ~16 tokens/sec speed reading, and both expected exceptions raised
+with their intended messages. Confirmed `ipykernel`/Jupyter config resolves from the venv
+(`uv run jupyter --paths` includes `.venv/etc/jupyter`), so VS Code's Jupyter extension should
+be able to pick up the interpreter as a kernel directly.
+
+No `notebooks/README.md` added — the notebook's own title/markdown cells cover it.
