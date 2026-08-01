@@ -139,3 +139,13 @@ Verified end-to-end: ran `./run.sh` in the background, confirmed `GET /health` r
 `{"status":"ok"}`, confirmed the frontend responds on `:3000`, confirmed via `ps aux` that the
 running `uvicorn` process resolves to `/Users/chiragshome/projects/llm-litmus/.venv/bin/uvicorn`
 (the new root venv, not the old `backend/.venv`), then stopped both processes.
+
+## Step 7 — `.github/workflows/ci.yml`
+
+Replaced both jobs' `actions/setup-python` + `pip install ...` steps with `astral-sh/setup-uv@v5`
++ `uv sync` + `uv run ruff check backend` / `uv run pytest`. No `working-directory` default
+needed since `pyproject.toml` now lives at repo root, matching the checkout root. No
+`actions/setup-python` step needed either — uv provisions its own interpreter in CI (a
+disposable, network-connected runner, unlike a developer's machine, so this doesn't contradict
+the `UV_PYTHON_DOWNLOADS=never` choice in `run.sh`). Not run against actual GitHub Actions in
+this session (no push/PR yet) — will get exercised on the next push.
