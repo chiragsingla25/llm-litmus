@@ -53,3 +53,19 @@ backend parametrization includes `trio`, which isn't installed and would fail th
 Instead, plain `def test_...()` functions drive the coroutines via `asyncio.run(...)`. Mocking
 uses only `unittest.mock` (`AsyncMock`/`MagicMock` patching `httpx.AsyncClient.post`) — no
 `respx` or similar added.
+
+## Step 4 — verification
+
+`ruff` isn't installed in the backend venv (it's configured in `pyproject.toml` but not listed
+in `requirements.txt`, so presumably run via CI/a separate dev install) — substituted a manual
+100-char line-length check (`pyproject.toml`'s configured limit) across the new/changed files;
+all within limit. `pytest -q` in `backend/`: 5 passed (4 new provider tests + the existing
+placeholder), no live Ollama instance required.
+
+Real-Ollama sanity check: Ollama was found running locally with `llama3.2:latest` pulled. Ran
+`LocalOllamaProvider.generate_response("llama3.2:latest", ...)` directly (not mocked) — got back
+correct `text`, non-zero `prompt_tokens`/`completion_tokens`, and non-zero durations, confirming
+the assumed Ollama response field names (`response`, `prompt_eval_count`, `eval_count`,
+`eval_duration`, `total_duration`) are correct. `test_speed` on the same model returned
+~27 tokens/sec, consistent with a small (3.2B, Q4) local model — confirms the
+`eval_duration`-based derivation formula behaves sensibly end to end.
