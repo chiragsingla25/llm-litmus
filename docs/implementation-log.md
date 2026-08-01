@@ -198,3 +198,30 @@ with their intended messages. Confirmed `ipykernel`/Jupyter config resolves from
 be able to pick up the interpreter as a kernel directly.
 
 No `notebooks/README.md` added — the notebook's own title/markdown cells cover it.
+
+## Step 11 — centralize static config into root-level `config.json`
+
+Prompted by the user noticing `config.py` hardcoded its one default inline, anticipating more
+config growth, and pointing out other scripts already had their own static values that should
+share one source: `backend/app/main.py` hardcoded the CORS origin `"http://localhost:3000"`
+(silently duplicating `run.sh`'s `FRONTEND_PORT=3000`), `run.sh` hardcoded both ports, and the
+notebook hardcoded `MODEL = "llama3.2:latest"`.
+
+Scope confirmed with user: environment/deployment settings only (Ollama URL, ports, default
+model) — not `providers.py`'s internal defaults (speed-test prompt, timeout, temperature), which
+stay as function parameters since they're one class's implementation details, not shared config.
+Ports explicitly included in the unification (not left as run.sh-only shell variables).
+
+Added `config.json` at repo root (`ollama_base_url`, `backend_port`, `frontend_port`,
+`default_model`). Rewrote `backend/app/core/config.py` to load defaults from it, keeping the
+existing per-field env var override pattern (e.g. `OLLAMA_BASE_URL` env still wins if set — same
+behavior as before, just JSON-backed instead of an inline literal). Added a derived
+`cors_origin` property (`f"http://localhost:{FRONTEND_PORT}"`) instead of a separate stored
+field — avoids reintroducing the exact kind of two-place duplication that motivated this change.
+`config.py` itself is kept (not deleted) — it's the necessary single Python-side loader; deleting
+it would just push JSON-parsing duplication into every consumer instead of removing it.
+
+`Path(__file__).resolve().parents[3]` resolves `core/` → `app/` → `backend/` → repo root; this
+depends on `app` being editable-installed (Step 9) so `__file__` always points at the real source
+file regardless of caller cwd — verified by importing `settings` both from the repo root and
+from inside `notebooks/`, both resolved all four fields correctly. `uv run pytest` still 5/5.
