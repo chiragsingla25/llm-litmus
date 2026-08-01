@@ -244,3 +244,11 @@ dependency introduced). Confirmed no earlier line in the script referenced `$BAC
 Verified end-to-end: ran `./run.sh` in the background again, confirmed the log line
 `Using backend port 8000, frontend port 3000 (from config.json)`, confirmed `GET /health` on
 `:8000` and the frontend on `:3000` both responded, then stopped both processes.
+
+## Step 14 — notebook: `MODEL` from `settings.DEFAULT_MODEL`
+
+`MODEL = "llama3.2:latest"` → `MODEL = settings.DEFAULT_MODEL` in the Setup cell (edited via the
+`NotebookEdit` tool — plain text edits aren't permitted on `.ipynb` files). Verified with the
+same technique used when the notebook was first added: extracted the equivalent code and ran it
+against the real local Ollama instance — `MODEL` correctly resolves to `"llama3.2:latest"` via
+config, and a real generation call against it still works.
