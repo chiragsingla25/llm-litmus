@@ -112,3 +112,30 @@ venv before now): it caught 3 real pre-existing lint issues in `backend/tests/te
 step. Fixed those (one commit, separate from the uv migration itself) — auto-fixed the import
 sort via `ruff check --fix`, manually combined the two nested `with` statements into single
 multi-context statements. `ruff check backend` is now clean.
+
+(Commit-boundary note: that lint-fix commit ended up also carrying the `backend/pyproject.toml`
+and `backend/requirements.txt` deletions, since they were already `git rm`-staged from earlier
+in this step and got swept in by an `git add` of just the test file. Content is correct either
+way, just not the intended 1:1 step-to-commit mapping.)
+
+## Step 6 — `run.sh`: uv-based backend setup
+
+Removed the `python3.13/3.12/3.11` detection loop and its `PYTHON_BIN` variable — uv resolves
+the interpreter itself against `requires-python` in `pyproject.toml`. Added a `uv` preflight
+check in the same style as the existing `node`/`ollama` checks (clear error + install link,
+`exit 1` if missing). Replaced the venv-creation + `pip install -r requirements.txt` +
+requirements-hash-check block with `UV_PYTHON_DOWNLOADS=never uv sync --project "$ROOT_DIR"`
+(the `never` flag preserves the old script's "fail loudly if no Python 3.11+ found" contract
+rather than let uv silently download an interpreter — confirmed uv does exactly that when
+allowed, since it had already cached one for the earlier stray root project), then
+`source "$ROOT_DIR/.venv/bin/activate"`.
+
+Kept the `hash_of` helper — it's still used by the (untouched) frontend section for
+`package.json` change detection; only the backend's own requirements-hash usage was removable,
+not the helper function itself. (Caught by review before committing — first draft of this edit
+deleted `hash_of` entirely and would have broken frontend setup.)
+
+Verified end-to-end: ran `./run.sh` in the background, confirmed `GET /health` returns
+`{"status":"ok"}`, confirmed the frontend responds on `:3000`, confirmed via `ps aux` that the
+running `uvicorn` process resolves to `/Users/chiragshome/projects/llm-litmus/.venv/bin/uvicorn`
+(the new root venv, not the old `backend/.venv`), then stopped both processes.
