@@ -149,3 +149,10 @@ needed since `pyproject.toml` now lives at repo root, matching the checkout root
 disposable, network-connected runner, unlike a developer's machine, so this doesn't contradict
 the `UV_PYTHON_DOWNLOADS=never` choice in `run.sh`). Not run against actual GitHub Actions in
 this session (no push/PR yet) — will get exercised on the next push.
+
+## Step 8 — `CLAUDE.md`
+
+Updated the one line mentioning pip: "Entry point is `run.sh` (venv + pip for backend, npm for
+frontend)" → "Entry point is `run.sh` (uv-managed root-level venv for backend, npm for
+frontend)". Completes the backend uv migration — code, run.sh, CI, and docs are now all
+consistent with the single root-level `.venv`.
