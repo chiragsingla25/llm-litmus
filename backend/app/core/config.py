@@ -6,7 +6,7 @@ via an environment variable of the same name for per-machine/CI overrides.
 
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 _CONFIG_PATH = Path(__file__).resolve().parents[3] / "config.json"
@@ -22,10 +22,18 @@ _defaults = _load_defaults()
 
 @dataclass(frozen=True)
 class Settings:
-    OLLAMA_BASE_URL: str = os.environ.get("OLLAMA_BASE_URL", _defaults["ollama_base_url"])
-    BACKEND_PORT: int = int(os.environ.get("BACKEND_PORT", _defaults["backend_port"]))
-    FRONTEND_PORT: int = int(os.environ.get("FRONTEND_PORT", _defaults["frontend_port"]))
-    DEFAULT_MODEL: str = os.environ.get("DEFAULT_MODEL", _defaults["default_model"])
+    OLLAMA_BASE_URL: str = field(
+        default_factory=lambda: os.environ.get("OLLAMA_BASE_URL", _defaults["ollama_base_url"])
+    )
+    BACKEND_PORT: int = field(
+        default_factory=lambda: int(os.environ.get("BACKEND_PORT", _defaults["backend_port"]))
+    )
+    FRONTEND_PORT: int = field(
+        default_factory=lambda: int(os.environ.get("FRONTEND_PORT", _defaults["frontend_port"]))
+    )
+    DEFAULT_MODEL: str = field(
+        default_factory=lambda: os.environ.get("DEFAULT_MODEL", _defaults["default_model"])
+    )
 
     @property
     def cors_origin(self) -> str:

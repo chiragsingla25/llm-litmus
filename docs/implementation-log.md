@@ -260,3 +260,28 @@ it) despite being listed in `.gitignore` — gitignore doesn't retroactively unt
 tracked files, so it showed as modified in every single `git status`/commit this entire session.
 `git rm --cached .DS_Store` — stays on disk locally (macOS regenerates it anyway), just stops
 being version-controlled. Other `.DS_Store` files elsewhere in the repo were already untracked.
+
+## Step 16 — add `test_config.py`; fix a real testability bug found while writing it
+
+The PR through Step 15 had been merged to `main`; before pushing the remaining local commits,
+the user asked to make sure pytest actually covers what changed. `config.py`'s new JSON-loading
++ env-override logic (Steps 11–13) had zero test coverage.
+
+While writing the test, found the `Settings` dataclass fields used bare
+`os.environ.get("X", _defaults["x"])` expressions as defaults — these are evaluated **once, at
+class-definition time** (i.e. at first module import), not per-instantiation. In production this
+is harmless (env vars are set before the process starts, so "first import" and "process start"
+coincide), but it made the class untestable: `monkeypatch.setenv(...)` followed by `Settings()`
+in a test would silently ignore the new env value, since the default had already been computed
+before the test ran. Fixed by switching each field to
+`field(default_factory=lambda: os.environ.get(...))` — `default_factory` callables run on every
+instantiation, so each `Settings()` call now genuinely re-reads the environment. No behavior
+change for the module-level `settings` singleton every other file imports (still computed once
+at import, same as before) — this only changes what happens when a *new* `Settings()` is
+constructed, which nothing except tests does.
+
+`backend/tests/test_config.py`: three tests — defaults match `config.json` (env vars cleared via
+`monkeypatch.delenv`), env vars override individual fields (others still fall back to JSON), and
+`cors_origin` derives correctly from `FRONTEND_PORT`. `uv run pytest`: 8/8 passing (5 previous +
+3 new). `uv run ruff check backend`: clean. Re-verified `app.main` still imports cleanly and CORS
+still resolves to `http://localhost:3000` after the dataclass change.
