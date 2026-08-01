@@ -252,3 +252,11 @@ Verified end-to-end: ran `./run.sh` in the background again, confirmed the log l
 same technique used when the notebook was first added: extracted the equivalent code and ran it
 against the real local Ollama instance — `MODEL` correctly resolves to `"llama3.2:latest"` via
 config, and a real generation call against it still works.
+
+## Step 15 — untrack `.DS_Store`
+
+Found while investigating this task: root `.DS_Store` was tracked in git (`git ls-files` showed
+it) despite being listed in `.gitignore` — gitignore doesn't retroactively untrack already-
+tracked files, so it showed as modified in every single `git status`/commit this entire session.
+`git rm --cached .DS_Store` — stays on disk locally (macOS regenerates it anyway), just stops
+being version-controlled. Other `.DS_Store` files elsewhere in the repo were already untracked.
