@@ -3,7 +3,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
-
 from app.core.providers import (
     GenerationResult,
     LocalOllamaProvider,
@@ -58,13 +57,13 @@ def test_test_speed_success():
 
 
 def test_generate_response_ollama_unreachable():
-    with patch("httpx.AsyncClient.post", AsyncMock(side_effect=httpx.ConnectError("refused"))):
-        with pytest.raises(OllamaUnreachableError):
-            asyncio.run(_provider().generate_response("llama3:8b", "hi"))
+    mock_post = AsyncMock(side_effect=httpx.ConnectError("refused"))
+    with patch("httpx.AsyncClient.post", mock_post), pytest.raises(OllamaUnreachableError):
+        asyncio.run(_provider().generate_response("llama3:8b", "hi"))
 
 
 def test_generate_response_model_not_found():
     err_json = {"error": "model 'nope:8b' not found, try pulling it first"}
-    with patch("httpx.AsyncClient.post", AsyncMock(return_value=_mock_response(404, err_json))):
-        with pytest.raises(OllamaModelNotFoundError):
-            asyncio.run(_provider().generate_response("nope:8b", "hi"))
+    mock_post = AsyncMock(return_value=_mock_response(404, err_json))
+    with patch("httpx.AsyncClient.post", mock_post), pytest.raises(OllamaModelNotFoundError):
+        asyncio.run(_provider().generate_response("nope:8b", "hi"))
