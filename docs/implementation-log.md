@@ -69,3 +69,46 @@ the assumed Ollama response field names (`response`, `prompt_eval_count`, `eval_
 `eval_duration`, `total_duration`) are correct. `test_speed` on the same model returned
 ~27 tokens/sec, consistent with a small (3.2B, Q4) local model — confirms the
 `eval_duration`-based derivation formula behaves sensibly end to end.
+
+## Step 5 — migrate backend from pip+venv to uv (single root-level venv)
+
+Prompted by the user hitting a failure running `pytest backend/tests`: VS Code (or an earlier
+action) had run `uv init` at the repo root, creating a stray, near-empty uv project there
+(`dependencies = []`, `requires-python = ">=3.12"`) with its own `.venv` containing only
+`pytest`. `.vscode/settings.json` already pointed the editor's Python interpreter at that root
+`.venv`, so any run through the editor (or a shell using that env) had no `fastapi`/`httpx`/etc.
+installed — hence both the failed pytest run and the "Import httpx could not be resolved"
+diagnostic on `providers.py`.
+
+Decision (explicit user direction, not the default originally proposed): consolidate on a
+**single root-level `.venv`**, matching the user's usual project layout, rather than scoping the
+uv project to `backend/`. Concretely:
+- Root `pyproject.toml` (previously the near-empty stray one) is now the real project file:
+  `requires-python` corrected to `>=3.11` (was `>=3.12`, stricter than intended), dependencies
+  set to the versions already verified working in the old `backend/.venv`
+  (`fastapi>=0.139.2, uvicorn>=0.51.0, httpx>=0.28.1, datasets>=5.0.0`), dev group
+  `pytest>=9.1.1` + `ruff` (ruff was previously undeclared — installed ad-hoc in CI only, never
+  present in any local venv). `[tool.uv] package = false` made explicit — the `app` package
+  under `backend/app` is never pip-installed, it resolves via cwd-relative imports, matching
+  current behavior. `[tool.pytest.ini_options] testpaths` set to `["backend/tests"]`.
+- Deleted: root `main.py` (unused `uv init` placeholder), root `.python-version` (no hard pin —
+  keeps "any 3.11+, newest available" flexibility), `backend/pyproject.toml` and
+  `backend/requirements.txt` (superseded), `backend/.venv/` (old pip venv) and the stray root
+  `.venv` (regenerated clean via `uv sync`).
+- `.vscode/settings.json` needed no change — it already pointed at
+  `${workspaceFolder}/.venv/bin/python`, which is now correct.
+
+This works without touching `backend/app`'s code because of two things confirmed true by
+actually running it (not just assumed): pytest's default import mode walks up from
+`backend/tests/__init__.py` to the first ancestor without an `__init__.py` (`backend/`) and
+inserts that onto `sys.path`, so `app.core...` imports resolve regardless of where pytest itself
+is invoked from — verified via `uv run pytest` from repo root, all 5 tests collected and passed.
+uvicorn resolves `app.main:app` relative to its own process cwd (not the venv's location), so
+`run.sh`'s existing `(cd backend && exec uvicorn app.main:app ...)` needs no change either.
+
+Side effect of running `ruff` for the first time ever locally (it was never installed in any
+venv before now): it caught 3 real pre-existing lint issues in `backend/tests/test_providers.py`
+(unsorted imports, two `SIM117` nested-`with` cases) from the previous provider-implementation
+step. Fixed those (one commit, separate from the uv migration itself) — auto-fixed the import
+sort via `ruff check --fix`, manually combined the two nested `with` statements into single
+multi-context statements. `ruff check backend` is now clean.
