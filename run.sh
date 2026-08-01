@@ -30,25 +30,12 @@ hash_of() {
 # Preflight checks
 # ---------------------------------------------------------------------------
 
-PYTHON_BIN=""
-for candidate in python3.13 python3.12 python3.11 python3; do
-    if command -v "$candidate" >/dev/null 2>&1; then
-        version="$("$candidate" -c 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}")')"
-        major="${version%%.*}"
-        minor="${version##*.}"
-        if [ "$major" -eq 3 ] && [ "$minor" -ge 11 ]; then
-            PYTHON_BIN="$candidate"
-            break
-        fi
-    fi
-done
-
-if [ -z "$PYTHON_BIN" ]; then
-    err "Python 3.11+ is required but was not found."
-    echo "  Install it from https://www.python.org/downloads/ or via pyenv, then re-run ./run.sh." >&2
+if ! command -v uv >/dev/null 2>&1; then
+    err "uv was not found."
+    echo "  Install it from https://docs.astral.sh/uv/getting-started/installation/, then re-run ./run.sh." >&2
     exit 1
 fi
-info "Using $($PYTHON_BIN --version) ($PYTHON_BIN)"
+info "Using $(uv --version)"
 
 if ! command -v node >/dev/null 2>&1; then
     err "Node.js was not found."
@@ -83,23 +70,15 @@ fi
 # Backend setup
 # ---------------------------------------------------------------------------
 
-if [ ! -d "$BACKEND_DIR/.venv" ]; then
-    info "Creating Python virtual environment..."
-    "$PYTHON_BIN" -m venv "$BACKEND_DIR/.venv"
+info "Syncing backend dependencies..."
+if ! UV_PYTHON_DOWNLOADS=never uv sync --project "$ROOT_DIR"; then
+    err "Failed to sync backend dependencies with uv."
+    echo "  Make sure Python 3.11+ is installed and on PATH, then re-run ./run.sh." >&2
+    exit 1
 fi
 
 # shellcheck disable=SC1091
-source "$BACKEND_DIR/.venv/bin/activate"
-
-REQ_HASH_FILE="$BACKEND_DIR/.venv/.requirements.hash"
-CURRENT_HASH="$(hash_of "$BACKEND_DIR/requirements.txt")"
-if [ ! -f "$REQ_HASH_FILE" ] || [ "$(cat "$REQ_HASH_FILE")" != "$CURRENT_HASH" ]; then
-    info "Installing backend dependencies..."
-    pip install -q -r "$BACKEND_DIR/requirements.txt"
-    echo "$CURRENT_HASH" > "$REQ_HASH_FILE"
-else
-    info "Backend dependencies already up to date"
-fi
+source "$ROOT_DIR/.venv/bin/activate"
 
 # ---------------------------------------------------------------------------
 # Frontend setup

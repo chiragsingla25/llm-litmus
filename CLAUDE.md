@@ -17,7 +17,7 @@ Full design doc: `docs/PROJECT_PLAN.md`. Read it before large changes.
 - Frontend: Next.js (App Router) + Recharts. Talks to backend via HTTP polling (no WebSockets).
 - Storage: stdlib `sqlite3`, no ORM. Tables: runs, responses, scores.
 - Datasets: Hugging Face `datasets` with default local caching (no streaming mode). Public/ungated only — no HF token.
-- No Docker. Entry point is `run.sh` (venv + pip for backend, npm for frontend).
+- No Docker. Entry point is `run.sh` (uv-managed root-level venv for backend, npm for frontend).
 - Reproducibility: temperature 0 for all benchmark generation. Record model tag, quantization, prompt-template version, and decoding params with every run.
 - Tests: pytest for allocator math, scorers, and provider interface. Keep scorers pure/testable without a live model.
 
