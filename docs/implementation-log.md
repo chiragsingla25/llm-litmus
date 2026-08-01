@@ -41,3 +41,15 @@ Added:
 Adapted from a rough first draft found on stray branch `origin/main_om`, which used the wrong
 class name (`OllamaProvider` instead of `BaseLLMProvider`/`LocalOllamaProvider`) and imported a
 `config.settings` that branch never actually implemented.
+
+## Step 3 — `backend/tests/test_providers.py`
+
+Four cases: successful `generate_response`, successful `test_speed` (asserts an exact tokens/sec
+figure to lock in the derivation formula), Ollama-unreachable, model-not-found.
+
+No new dependency added. Deliberately avoided `pytest-asyncio` and `async def test_...` — the
+repo's transitively-installed `anyio` would auto-register its pytest plugin, but its default
+backend parametrization includes `trio`, which isn't installed and would fail those tests.
+Instead, plain `def test_...()` functions drive the coroutines via `asyncio.run(...)`. Mocking
+uses only `unittest.mock` (`AsyncMock`/`MagicMock` patching `httpx.AsyncClient.post`) — no
+`respx` or similar added.
