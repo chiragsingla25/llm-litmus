@@ -232,3 +232,15 @@ from inside `notebooks/`, both resolved all four fields correctly. `uv run pytes
 importing the app object directly (`from app.main import app`) and inspecting
 `app.user_middleware[0].kwargs["allow_origins"]` — resolves to `['http://localhost:3000']`,
 same value as before but now derived from `FRONTEND_PORT` instead of duplicated as a literal.
+
+## Step 13 — `run.sh`: read ports from config.json
+
+Removed the hardcoded `BACKEND_PORT=8000`/`FRONTEND_PORT=3000` near the top. Added JSON parsing
+right after `source "$ROOT_DIR/.venv/bin/activate"` in the Backend setup block (so the venv's own
+`python` — guaranteed present at that point — does the parsing, no new `jq`/system-Python
+dependency introduced). Confirmed no earlier line in the script referenced `$BACKEND_PORT`/
+`$FRONTEND_PORT` before that point (`grep -n` check), so moving the assignment later is safe.
+
+Verified end-to-end: ran `./run.sh` in the background again, confirmed the log line
+`Using backend port 8000, frontend port 3000 (from config.json)`, confirmed `GET /health` on
+`:8000` and the frontend on `:3000` both responded, then stopped both processes.

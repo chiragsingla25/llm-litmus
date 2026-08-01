@@ -5,8 +5,6 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="$ROOT_DIR/backend"
 FRONTEND_DIR="$ROOT_DIR/frontend"
-BACKEND_PORT=8000
-FRONTEND_PORT=3000
 
 RED='\033[0;31m'
 YELLOW='\033[0;33m'
@@ -79,6 +77,11 @@ fi
 
 # shellcheck disable=SC1091
 source "$ROOT_DIR/.venv/bin/activate"
+
+CONFIG_FILE="$ROOT_DIR/config.json"
+BACKEND_PORT="$(python -c "import json; print(json.load(open('$CONFIG_FILE'))['backend_port'])")"
+FRONTEND_PORT="$(python -c "import json; print(json.load(open('$CONFIG_FILE'))['frontend_port'])")"
+info "Using backend port $BACKEND_PORT, frontend port $FRONTEND_PORT (from config.json)"
 
 # ---------------------------------------------------------------------------
 # Frontend setup
