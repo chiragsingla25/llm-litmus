@@ -156,3 +156,24 @@ Updated the one line mentioning pip: "Entry point is `run.sh` (venv + pip for ba
 frontend)" → "Entry point is `run.sh` (uv-managed root-level venv for backend, npm for
 frontend)". Completes the backend uv migration — code, run.sh, CI, and docs are now all
 consistent with the single root-level `.venv`.
+
+## Step 9 — editable-install `app` as a real package; add `ipykernel`
+
+Prompted by adding a `notebooks/` folder for manual experimentation: a notebook kernel started
+from `notebooks/` has neither pytest's package-root-walking sys.path insertion nor uvicorn's
+own-cwd insertion to fall back on, so `import app...` would fail there. First instinct was a
+`sys.path.insert(...)` cell at the top of the notebook — user explicitly rejected that ("dont
+use sys append path, it should be able to import script directly"). Correct fix: make `app` an
+actually-installed (editable) package in the venv, not merely cwd-resolvable.
+
+Added `[build-system]` (hatchling) + `[tool.hatch.build.targets.wheel] packages = ["backend/app"]`
+to root `pyproject.toml`, and removed `[tool.uv] package = false` (which had explicitly opted
+*out* of installing `app` — now the opposite of what's wanted). Added `ipykernel` to the `dev`
+group for the VS Code Jupyter extension to use against the root `.venv` (confirmed with user:
+VS Code's extension only needs `ipykernel`, not a full `jupyterlab`/`notebook` server).
+
+`uv sync` built and editable-installed `llm-litmus==0.1.0` from `backend/app`. Verified:
+`uv run python -c "import app; print(app.__file__)"` resolves to
+`backend/app/__init__.py` both from repo root and from inside `notebooks/` with zero path
+manipulation — confirms the fix is real, not just working by accident from one directory.
+`uv run pytest` still 5/5 passing — no regression from the build-system change.
