@@ -225,3 +225,10 @@ it would just push JSON-parsing duplication into every consumer instead of remov
 depends on `app` being editable-installed (Step 9) so `__file__` always points at the real source
 file regardless of caller cwd — verified by importing `settings` both from the repo root and
 from inside `notebooks/`, both resolved all four fields correctly. `uv run pytest` still 5/5.
+
+## Step 12 — `main.py`: derive CORS origin from config
+
+`allow_origins=["http://localhost:3000"]` → `allow_origins=[settings.cors_origin]`. Verified by
+importing the app object directly (`from app.main import app`) and inspecting
+`app.user_middleware[0].kwargs["allow_origins"]` — resolves to `['http://localhost:3000']`,
+same value as before but now derived from `FRONTEND_PORT` instead of duplicated as a literal.
