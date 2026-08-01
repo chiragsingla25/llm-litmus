@@ -156,3 +156,132 @@ Updated the one line mentioning pip: "Entry point is `run.sh` (venv + pip for ba
 frontend)" → "Entry point is `run.sh` (uv-managed root-level venv for backend, npm for
 frontend)". Completes the backend uv migration — code, run.sh, CI, and docs are now all
 consistent with the single root-level `.venv`.
+
+## Step 9 — editable-install `app` as a real package; add `ipykernel`
+
+Prompted by adding a `notebooks/` folder for manual experimentation: a notebook kernel started
+from `notebooks/` has neither pytest's package-root-walking sys.path insertion nor uvicorn's
+own-cwd insertion to fall back on, so `import app...` would fail there. First instinct was a
+`sys.path.insert(...)` cell at the top of the notebook — user explicitly rejected that ("dont
+use sys append path, it should be able to import script directly"). Correct fix: make `app` an
+actually-installed (editable) package in the venv, not merely cwd-resolvable.
+
+Added `[build-system]` (hatchling) + `[tool.hatch.build.targets.wheel] packages = ["backend/app"]`
+to root `pyproject.toml`, and removed `[tool.uv] package = false` (which had explicitly opted
+*out* of installing `app` — now the opposite of what's wanted). Added `ipykernel` to the `dev`
+group for the VS Code Jupyter extension to use against the root `.venv` (confirmed with user:
+VS Code's extension only needs `ipykernel`, not a full `jupyterlab`/`notebook` server).
+
+`uv sync` built and editable-installed `llm-litmus==0.1.0` from `backend/app`. Verified:
+`uv run python -c "import app; print(app.__file__)"` resolves to
+`backend/app/__init__.py` both from repo root and from inside `notebooks/` with zero path
+manipulation — confirms the fix is real, not just working by accident from one directory.
+`uv run pytest` still 5/5 passing — no regression from the build-system change.
+
+## Step 10 — `notebooks/provider_walkthrough.ipynb`
+
+One notebook (per user's explicit preference over several small ones), five markdown-titled
+sections run top to bottom: **Setup** (direct `from app.core... import ...`, no path
+manipulation — relies on Step 9's editable install), **Check Ollama is reachable** (prints
+`settings.OLLAMA_BASE_URL`, hits `/api/tags`, lists locally pulled models), **Generate a
+response**, **Speed test**, and **Error handling** (both `OllamaUnreachableError` — bad base
+URL — and `OllamaModelNotFoundError` — nonexistent model). Uses top-level `await` (ipykernel
+supports this natively) rather than `asyncio.run(...)`, since that's the idiomatic notebook
+style, not the plain-script style used in `backend/tests/test_providers.py`.
+
+Committed with empty outputs — it's a template for the user to run themselves, not a snapshot of
+one run. Before committing, extracted the exact cell code into an equivalent script and ran it
+for real against the local Ollama instance (`llama3.2:latest`) to confirm every section actually
+works: real generation output, ~16 tokens/sec speed reading, and both expected exceptions raised
+with their intended messages. Confirmed `ipykernel`/Jupyter config resolves from the venv
+(`uv run jupyter --paths` includes `.venv/etc/jupyter`), so VS Code's Jupyter extension should
+be able to pick up the interpreter as a kernel directly.
+
+No `notebooks/README.md` added — the notebook's own title/markdown cells cover it.
+
+## Step 11 — centralize static config into root-level `config.json`
+
+Prompted by the user noticing `config.py` hardcoded its one default inline, anticipating more
+config growth, and pointing out other scripts already had their own static values that should
+share one source: `backend/app/main.py` hardcoded the CORS origin `"http://localhost:3000"`
+(silently duplicating `run.sh`'s `FRONTEND_PORT=3000`), `run.sh` hardcoded both ports, and the
+notebook hardcoded `MODEL = "llama3.2:latest"`.
+
+Scope confirmed with user: environment/deployment settings only (Ollama URL, ports, default
+model) — not `providers.py`'s internal defaults (speed-test prompt, timeout, temperature), which
+stay as function parameters since they're one class's implementation details, not shared config.
+Ports explicitly included in the unification (not left as run.sh-only shell variables).
+
+Added `config.json` at repo root (`ollama_base_url`, `backend_port`, `frontend_port`,
+`default_model`). Rewrote `backend/app/core/config.py` to load defaults from it, keeping the
+existing per-field env var override pattern (e.g. `OLLAMA_BASE_URL` env still wins if set — same
+behavior as before, just JSON-backed instead of an inline literal). Added a derived
+`cors_origin` property (`f"http://localhost:{FRONTEND_PORT}"`) instead of a separate stored
+field — avoids reintroducing the exact kind of two-place duplication that motivated this change.
+`config.py` itself is kept (not deleted) — it's the necessary single Python-side loader; deleting
+it would just push JSON-parsing duplication into every consumer instead of removing it.
+
+`Path(__file__).resolve().parents[3]` resolves `core/` → `app/` → `backend/` → repo root; this
+depends on `app` being editable-installed (Step 9) so `__file__` always points at the real source
+file regardless of caller cwd — verified by importing `settings` both from the repo root and
+from inside `notebooks/`, both resolved all four fields correctly. `uv run pytest` still 5/5.
+
+## Step 12 — `main.py`: derive CORS origin from config
+
+`allow_origins=["http://localhost:3000"]` → `allow_origins=[settings.cors_origin]`. Verified by
+importing the app object directly (`from app.main import app`) and inspecting
+`app.user_middleware[0].kwargs["allow_origins"]` — resolves to `['http://localhost:3000']`,
+same value as before but now derived from `FRONTEND_PORT` instead of duplicated as a literal.
+
+## Step 13 — `run.sh`: read ports from config.json
+
+Removed the hardcoded `BACKEND_PORT=8000`/`FRONTEND_PORT=3000` near the top. Added JSON parsing
+right after `source "$ROOT_DIR/.venv/bin/activate"` in the Backend setup block (so the venv's own
+`python` — guaranteed present at that point — does the parsing, no new `jq`/system-Python
+dependency introduced). Confirmed no earlier line in the script referenced `$BACKEND_PORT`/
+`$FRONTEND_PORT` before that point (`grep -n` check), so moving the assignment later is safe.
+
+Verified end-to-end: ran `./run.sh` in the background again, confirmed the log line
+`Using backend port 8000, frontend port 3000 (from config.json)`, confirmed `GET /health` on
+`:8000` and the frontend on `:3000` both responded, then stopped both processes.
+
+## Step 14 — notebook: `MODEL` from `settings.DEFAULT_MODEL`
+
+`MODEL = "llama3.2:latest"` → `MODEL = settings.DEFAULT_MODEL` in the Setup cell (edited via the
+`NotebookEdit` tool — plain text edits aren't permitted on `.ipynb` files). Verified with the
+same technique used when the notebook was first added: extracted the equivalent code and ran it
+against the real local Ollama instance — `MODEL` correctly resolves to `"llama3.2:latest"` via
+config, and a real generation call against it still works.
+
+## Step 15 — untrack `.DS_Store`
+
+Found while investigating this task: root `.DS_Store` was tracked in git (`git ls-files` showed
+it) despite being listed in `.gitignore` — gitignore doesn't retroactively untrack already-
+tracked files, so it showed as modified in every single `git status`/commit this entire session.
+`git rm --cached .DS_Store` — stays on disk locally (macOS regenerates it anyway), just stops
+being version-controlled. Other `.DS_Store` files elsewhere in the repo were already untracked.
+
+## Step 16 — add `test_config.py`; fix a real testability bug found while writing it
+
+The PR through Step 15 had been merged to `main`; before pushing the remaining local commits,
+the user asked to make sure pytest actually covers what changed. `config.py`'s new JSON-loading
++ env-override logic (Steps 11–13) had zero test coverage.
+
+While writing the test, found the `Settings` dataclass fields used bare
+`os.environ.get("X", _defaults["x"])` expressions as defaults — these are evaluated **once, at
+class-definition time** (i.e. at first module import), not per-instantiation. In production this
+is harmless (env vars are set before the process starts, so "first import" and "process start"
+coincide), but it made the class untestable: `monkeypatch.setenv(...)` followed by `Settings()`
+in a test would silently ignore the new env value, since the default had already been computed
+before the test ran. Fixed by switching each field to
+`field(default_factory=lambda: os.environ.get(...))` — `default_factory` callables run on every
+instantiation, so each `Settings()` call now genuinely re-reads the environment. No behavior
+change for the module-level `settings` singleton every other file imports (still computed once
+at import, same as before) — this only changes what happens when a *new* `Settings()` is
+constructed, which nothing except tests does.
+
+`backend/tests/test_config.py`: three tests — defaults match `config.json` (env vars cleared via
+`monkeypatch.delenv`), env vars override individual fields (others still fall back to JSON), and
+`cors_origin` derives correctly from `FRONTEND_PORT`. `uv run pytest`: 8/8 passing (5 previous +
+3 new). `uv run ruff check backend`: clean. Re-verified `app.main` still imports cleanly and CORS
+still resolves to `http://localhost:3000` after the dataclass change.
