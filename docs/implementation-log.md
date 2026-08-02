@@ -507,3 +507,28 @@ real (unmocked) `get_model_info("llama3.2:latest")` call directly — returned
 `ModelInfo(quantization_level='Q4_K_M', parameter_size='3.2B')`, matching the mocked test
 exactly. `uv run pytest`: 40/40 passing (38 previous + 2 new). `uv run ruff check backend`:
 clean.
+
+## Step 26 — `JudgeScorer`
+
+`backend/app/scorers/judge/__init__.py`. Builds a rubric prompt via `rubric_template.format(
+response_text=item.response_text, **item.gold_reference)`, calls
+`provider.generate_response(judge_model, prompt, temperature=0.0)` (temperature 0 even for the
+judge, per CLAUDE.md's reproducibility rule), and parses a `{"score", "rationale"}` JSON
+response. Never raises on a parse failure — returns `passed=None`,
+`rationale="JUDGE_PARSE_FAILED"` instead, since one bad judge response shouldn't take down an
+entire scoring pass (per the plan).
+
+`_extract_json` is a best-effort, three-candidate parse: markdown-fenced JSON first (judges often
+wrap output in ` ```json ` fences despite instructions not to), then the raw response text
+as-is, then a regex-extracted `{...}` substring as a last resort — tries each in order, accepts
+the first that parses as a dict containing a `"score"` key. On parse failure, retries once
+(`max_retries=1` default) with a strengthened prompt appended, asking explicitly for bare JSON.
+`passed` is derived as `score >= 0.5`, which works for the binary 0/1 rubric TruthfulQA will use
+(Step 11) without hardcoding binary-only assumptions into the generic scorer.
+
+`backend/tests/test_judge_scorer.py`: hand-rolled `FakeProvider` (`AsyncMock` with
+`generate_response.side_effect` set to a sequence of canned `GenerationResult`s) — four cases:
+valid JSON on the first try, malformed-then-valid-on-retry (asserts exactly 2 calls), malformed
+exhausting both retries (asserts `JUDGE_PARSE_FAILED` and that `raw_judge_output` captures the
+*last* attempt's text), and JSON wrapped in markdown fences. `uv run pytest`: 44/44 passing (40
+previous + 4 new). `uv run ruff check backend`: clean.
