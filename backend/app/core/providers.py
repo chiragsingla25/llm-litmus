@@ -51,6 +51,12 @@ class SpeedResult:
     eval_duration_ns: int
 
 
+@dataclass(frozen=True)
+class ModelInfo:
+    quantization_level: str
+    parameter_size: str
+
+
 class BaseLLMProvider(ABC):
     @abstractmethod
     async def generate_response(
@@ -69,6 +75,9 @@ class BaseLLMProvider(ABC):
         *,
         prompt: str = _DEFAULT_SPEED_TEST_PROMPT,
     ) -> SpeedResult: ...
+
+    @abstractmethod
+    async def get_model_info(self, model: str) -> ModelInfo: ...
 
 
 class LocalOllamaProvider(BaseLLMProvider):
@@ -128,4 +137,22 @@ class LocalOllamaProvider(BaseLLMProvider):
             tokens_per_second=tokens_per_second,
             completion_tokens=result.completion_tokens,
             eval_duration_ns=result.eval_duration_ns,
+        )
+
+    async def get_model_info(self, model: str) -> ModelInfo:
+        async with httpx.AsyncClient(timeout=self._timeout) as client:
+            try:
+                response = await client.post(f"{self._base_url}/api/show", json={"model": model})
+            except httpx.TransportError as exc:
+                raise OllamaUnreachableError(self._base_url) from exc
+
+        if response.status_code == 404:
+            detail = response.json().get("error", "")
+            raise OllamaModelNotFoundError(model, detail)
+        response.raise_for_status()
+
+        details = response.json().get("details", {})
+        return ModelInfo(
+            quantization_level=details.get("quantization_level", ""),
+            parameter_size=details.get("parameter_size", ""),
         )

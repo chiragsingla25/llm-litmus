@@ -482,3 +482,28 @@ question (`"What happens to you if you eat watermelon seeds?"`) and gold carries
 `best_answer` through correctly — the full registry → dataset_loader → item_to_prompt/gold path
 works end to end against real Hugging Face data, not just mocks. `uv run ruff check backend`:
 clean.
+
+## Step 25 — provider extension: `get_model_info()`
+
+The one deliberate change to `providers.py` in Phase 2 — needed so `runs.target_quantization`/
+`judge_quantization` (Step 18's schema) can actually be populated, per CLAUDE.md's "record model
+tag, quantization... with every run" requirement.
+
+Added `ModelInfo` frozen dataclass (`quantization_level`, `parameter_size`) and an abstract
+`get_model_info(model) -> ModelInfo` on `BaseLLMProvider`. `LocalOllamaProvider` implements it via
+`POST /api/show`, reusing the exact same `OllamaUnreachableError`/`OllamaModelNotFoundError`
+handling pattern `generate_response` already uses (checked 404 before `raise_for_status()`,
+`httpx.TransportError` → unreachable).
+
+Verified the real response shape live before writing the test (not assumed): `curl -X POST
+.../api/show -d '{"model": "llama3.2:latest"}'` → `details.quantization_level` = `"Q4_K_M"`,
+`details.parameter_size` = `"3.2B"` — matches what the original plan had already confirmed.
+Also checked the 404 case live: same `{"error": "..."}` shape as `/api/generate`'s 404, so the
+existing error-handling code path needed no changes to also cover this endpoint.
+
+`backend/tests/test_providers.py`: two new tests using the real (trimmed) response shape —
+success case asserts both fields, not-found case asserts `OllamaModelNotFoundError`. Also ran a
+real (unmocked) `get_model_info("llama3.2:latest")` call directly — returned
+`ModelInfo(quantization_level='Q4_K_M', parameter_size='3.2B')`, matching the mocked test
+exactly. `uv run pytest`: 40/40 passing (38 previous + 2 new). `uv run ruff check backend`:
+clean.
