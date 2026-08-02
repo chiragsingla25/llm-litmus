@@ -679,3 +679,33 @@ real model prose, not truncated or malformed). Cleaned up the temporary sanity-c
 **Phase 2 is done.** Registry (MMLU + TruthfulQA), two-pass run loop, both scorer types, and a
 minimal trigger/poll API all work end-to-end against real local models, not just mocks. Final
 count: `uv run pytest` — 55/55 passing. `uv run ruff check backend` — clean.
+
+## Step 31 — extend `provider_walkthrough.ipynb` with Phase 2 sections
+
+The notebook's own intro (written when it was first added, Step 10) already said: "More sections
+will be added here as later phases (registry, two-pass run loop, scorers) land." This step makes
+good on that — one notebook, not a second file, consistent with the user's stated preference for
+a single combined notebook over several small ones.
+
+Added to the existing **Setup** cell: imports for `app.database`, `app.evaluations.run_loop`,
+`app.registry`, a `JUDGE_MODEL` variable (`deepseek-r1:1.5b`, confirmed pulled locally), and an
+`init_db` call so sections 7-8 have tables to write to regardless of whether `run.sh`/the FastAPI
+lifespan hook has ever run in this environment. Retitled the notebook's intro to describe both
+Phase 1 (sections 1-5) and Phase 2 (sections 6-8) content.
+
+Three new sections: **6. Registry** — lists `TESTS`, printing each entry's dataset
+source/config/split, scoring type, and scorer name. **7. Run the full pipeline: MMLU** —
+`create_run` + `await run_test(...)` + queries the resulting `runs`/`responses`/`scores` rows
+directly (same query pattern used in `test_run_loop.py`), printing each response alongside its
+score and rationale. **8. Run the full pipeline: TruthfulQA** — same shape, with `JUDGE_MODEL`
+passed through, plus a markdown note pointing at the doc's measurement-honesty section (judge
+scores are model opinion, not ground truth) since this is the first place in the notebook a judge
+score is actually shown to the user.
+
+Edited via the `NotebookEdit` tool (plain edits aren't permitted on `.ipynb` files, same as
+Step 14). Verified the exact new cell logic — not a paraphrase — as an equivalent script against
+real Ollama before leaving the committed notebook cells with empty outputs: registry listing
+printed both test IDs and their `scoring_type`s correctly, both `run_test` calls (MMLU,
+TruthfulQA with the judge) completed with `status == "complete"` at `sample_size=2`. Deleted the
+temporary verification database (`/tmp/notebook_phase2_check.db`) afterward. `uv run pytest`:
+55/55 still passing (no backend code touched by this step). `uv run ruff check backend`: clean.
