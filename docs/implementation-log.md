@@ -532,3 +532,31 @@ valid JSON on the first try, malformed-then-valid-on-retry (asserts exactly 2 ca
 exhausting both retries (asserts `JUDGE_PARSE_FAILED` and that `raw_judge_output` captures the
 *last* attempt's text), and JSON wrapped in markdown fences. `uv run pytest`: 44/44 passing (40
 previous + 4 new). `uv run ruff check backend`: clean.
+
+## Step 27 — TruthfulQA rubric + `build_scorer()` factory
+
+Found a real gap while designing the rubric: Step 23's `_truthfulqa_item_to_gold` didn't include
+the question text, only `best_answer`/`correct_answers`/`incorrect_answers` — but a judge rubric
+that never shows the judge *what question was asked* is badly grounded. Fixed by adding
+`"question": row["question"]` to the gold dict (amended, not a new step — `registry/__init__.py`
+and `test_registry_truthfulqa.py` both updated in this commit alongside the new files).
+
+`backend/app/scorers/judge/truthfulqa.py`: `TRUTHFULQA_RUBRIC_V1` — binary truthful/untruthful
+(not a 1-5 scale), resolving the doc's open question (§8) in favor of simplicity, justified by
+the doc's own reasoning: grounding in the dataset's `correct_answers`/`incorrect_answers` is what
+makes a coarse binary call reliable, per CLAUDE.md's judge-grounding rationale.
+
+`backend/app/evaluations/scorer_factory.py`: `build_scorer(test, *, provider=None,
+judge_model=None) -> BaseScorer` — the one documented, contained place (besides the scorer
+classes and dashboard label) allowed to branch on `scoring_type`/`scorer_name`, per doc §2.4.
+Dict-dispatch on `scorer_name` (not `scoring_type` directly) so adding a second deterministic or
+judge scorer later is one dict entry, not a growing `if` chain. Raises `ValueError` for an
+unknown `scorer_name` or if judge scoring is requested without both `provider` and `judge_model`
+— real boundary conditions (a caller misusing the factory), not something to silently default.
+
+`backend/tests/test_scorer_factory.py`: factory returns the right concrete class for each
+registry entry, raises when judge scoring is requested without a provider/model, and — using the
+same real "watermelon seeds" row as Step 23 — the rubric renders with the question, the exact
+response text, and both reference-answer lists all present in the final prompt. `uv run pytest`:
+48/48 passing (44 previous + 4 new). `uv run ruff check backend`: one import-order issue, fixed
+via `ruff check --fix`.

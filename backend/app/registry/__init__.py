@@ -46,6 +46,7 @@ def _truthfulqa_item_to_prompt(row: dict[str, Any]) -> str:
 
 def _truthfulqa_item_to_gold(row: dict[str, Any]) -> dict[str, Any]:
     return {
+        "question": row["question"],
         "best_answer": row["best_answer"],
         "correct_answers": row["correct_answers"],
         "incorrect_answers": row["incorrect_answers"],
