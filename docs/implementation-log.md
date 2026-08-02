@@ -709,3 +709,28 @@ printed both test IDs and their `scoring_type`s correctly, both `run_test` calls
 TruthfulQA with the judge) completed with `status == "complete"` at `sample_size=2`. Deleted the
 temporary verification database (`/tmp/notebook_phase2_check.db`) afterward. `uv run pytest`:
 55/55 still passing (no backend code touched by this step). `uv run ruff check backend`: clean.
+
+## Step 32 — fix notebook validation issue (missing cell `id` fields)
+
+User reported "notebook is not executing successfully." Investigated by actually executing the
+notebook end-to-end via `nbclient` (added temporarily via `uv run --with nbclient`, not to the
+project's real dependencies) rather than just an equivalent script — closer to what a real
+Jupyter kernel does, including top-level `await` handling. Result: **it executed successfully**,
+proving the cell logic itself is sound. This does surface one real, if separate, defect worth
+fixing regardless: `nbclient`/`nbformat` emitted `MissingIDFieldWarning` — all 14 cells from the
+notebook's original creation (Step 10) were missing the `id` field nbformat 4.5+ requires
+("this will become a hard error in future nbformat versions"). Fixed by assigning each a unique
+id. Also normalized: cells touched by the `NotebookEdit` tool during this session's Phase 2
+extension (Step 31) had their `source` written as a single string rather than nbformat's more
+common list-of-lines form — both are technically valid per spec, but inconsistent within one
+file; unified to list-of-lines for consistency while fixing the ids.
+
+Re-executed via `nbclient` after the fix: succeeds cleanly with no warnings. `uv run pytest`
+still 55/55 (no backend code touched).
+
+**Not yet resolved**: the user's original failure. Since the notebook demonstrably executes
+correctly both as an equivalent script (verified at Steps 14 and 31) and via a real notebook
+kernel (`nbclient`, this step), the cause is most likely environment-specific to their machine —
+wrong/no kernel selected in VS Code, or a model referenced in the notebook (`JUDGE_MODEL =
+"deepseek-r1:1.5b"`, hardcoded in the Setup cell) not being pulled there. Asked the user for the
+exact error message and which cell fails.
