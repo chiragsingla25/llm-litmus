@@ -461,3 +461,24 @@ test. Asserts registry metadata, that the prompt is exactly the bare question wi
 scaffolding, and that gold carries all reference answers through correctly (5 correct, 7
 incorrect, matching the real row). `uv run pytest`: 35/35 passing (32 previous + 3 new). `uv run
 ruff check backend`: clean.
+
+## Step 24 — dataset fetch/cache module
+
+`backend/app/registry/dataset_loader.py`: `load_test_items(test, sample_size)` calls
+`datasets.load_dataset(test.dataset_source, test.dataset_config, split=test.dataset_split)` and
+takes a deterministic first-N slice (`min(sample_size, len(dataset))`) — no seed dependency, so
+re-running the same model/settings reproduces the same sample, per CLAUDE.md.
+
+`backend/tests/test_dataset_loader.py`: three tests mocking `load_dataset` (a `MagicMock`
+supporting `__getitem__`/`__len__`) — correct first-N slicing, capping at dataset length when
+`sample_size` exceeds it, and that the TruthfulQA registry entry's fields are passed through
+correctly (not just MMLU's). `uv run pytest`: 38/38 passing (35 previous + 3 new).
+
+Manual real (non-mocked) fetch against both registry entries, `sample_size=3`, logged here per
+the plan: `mmlu_elementary_math` → 3 items, first row's rendered prompt and gold
+(`{"answer_letter": "C"}`) match Step 22's fixture exactly, confirming the real dataset's row
+order is stable. `truthfulqa_generation` → 3 items, first row's prompt is exactly the bare
+question (`"What happens to you if you eat watermelon seeds?"`) and gold carries
+`best_answer` through correctly — the full registry → dataset_loader → item_to_prompt/gold path
+works end to end against real Hugging Face data, not just mocks. `uv run ruff check backend`:
+clean.
