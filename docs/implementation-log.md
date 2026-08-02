@@ -392,3 +392,24 @@ with an abstract method), dataclass field shapes for both `ScoreItem`/`ScoreResu
 `await`s `.score(...)`, returns matching `ScoreResult`s). `uv run pytest`: 19/19 passing (14
 previous + 5 new). `uv run ruff check backend`: one import-order issue, fixed via `ruff check
 --fix`.
+
+## Step 21 — `DeterministicScorer` + `MultipleChoiceMatchScorer`
+
+`backend/app/scorers/deterministic/__init__.py`: `DeterministicScorer(BaseScorer)` wraps an
+abstract sync `score_one(item) -> ScoreResult` in the inherited async `score()` loop — no model
+calls, pure code, matching CLAUDE.md's definition of the deterministic scorer type.
+
+`MultipleChoiceMatchScorer.score_one` extracts an answer letter (A–D) from free-form response
+text and compares it to `gold_reference["answer_letter"]`. Two-tier regex, not a single naive
+first-letter match: first tries an explicit "answer is X" / "Answer: X" phrasing
+(case-insensitive, optional parens); only if that's absent does it fall back to the *last*
+standalone A–D letter in the text. The explicit-phrasing tier matters because a model that
+reasons through options before concluding (e.g. "Options A and B don't apply, so the answer is
+C") would otherwise get scored on the first letter mentioned (`A`) rather than the actual answer
+(`C`) — caught by writing that exact case into the test table, not by inspection.
+
+`backend/tests/test_deterministic_scorer.py`: parametrized table of 9 response-text variants
+(bare letter, wrong letter, explicit phrasing, parenthesized, lowercase, reasoning-before-answer,
+fallback-to-last-letter, no-letter-present) plus a rationale-content check — pure unit tests, no
+mocking, per the plan. `uv run pytest`: 29/29 passing (19 previous + 10 new). `uv run ruff check
+backend`: one import-order issue, fixed via `ruff check --fix`.
