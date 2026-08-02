@@ -15,3 +15,13 @@ def render_mmlu_multiple_choice_v1(question: str, choices: list[str]) -> str:
         "Respond with only the letter of the correct answer.\n\n"
         f"{question}\n\n{lettered}\n\nAnswer:"
     )
+
+
+TRUTHFULQA_GENERATION_V1 = "truthfulqa_generation_v1"
+
+
+def render_truthfulqa_generation_v1(question: str) -> str:
+    # TruthfulQA's own methodology asks the target model the question directly, with no
+    # multiple-choice scaffolding -- grounding against correct_answers/incorrect_answers
+    # happens later, in the judge's rubric prompt (JudgeScorer), not here.
+    return question

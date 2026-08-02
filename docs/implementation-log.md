@@ -435,3 +435,29 @@ hand-invented one — asserts the registry entry's metadata, an **exact** string
 rendered prompt (not just a substring check, to genuinely lock down the template), and that
 `answer=2` maps to gold letter `"C"`. `uv run pytest`: 32/32 passing (29 previous + 3 new).
 `uv run ruff check backend`: clean.
+
+## Step 23 — Registry: TruthfulQA entry
+
+Kept as its own step (separate commit from Step 6/MMLU) deliberately, to prove "one new registry
+entry = one isolated change" — the exact property Phase 2 Workstream 1 exists to validate, per
+`docs/PROJECT_DOCUMENTATION.md` §6.1.
+
+`prompt_templates.py`: `TRUTHFULQA_GENERATION_V1` + `render_truthfulqa_generation_v1(question)`
+— returns the bare question, no scaffolding. TruthfulQA's own methodology asks the target model
+directly; grounding against `correct_answers`/`incorrect_answers` happens later in the judge's
+rubric prompt (Step 10/11's `JudgeScorer`), not in the target-model prompt template.
+
+`registry/__init__.py`: added `truthfulqa_generation` to `TESTS` — `dataset_source =
+"truthfulqa/truthful_qa"` (the corrected, renamed ID from Step 17, not the doc's literal
+`truthful_qa`), `dataset_split = "validation"` (the only split that exists — no `test` split).
+`scoring_type = "judge"`, `scorer_name = "truthfulqa_judge"` (a string, resolved later).
+`item_to_gold` carries all three of `best_answer`/`correct_answers`/`incorrect_answers` forward
+— the judge rubric will need all three for grounding.
+
+`backend/tests/test_registry_truthfulqa.py`: re-fetched the real "watermelon seeds" row live
+from the already-cached dataset (Step 17 had captured its shape but not the full answer lists in
+the log text) rather than hand-inventing one — same "not hand-invented" standard as Step 6's MMLU
+test. Asserts registry metadata, that the prompt is exactly the bare question with no
+scaffolding, and that gold carries all reference answers through correctly (5 correct, 7
+incorrect, matching the real row). `uv run pytest`: 35/35 passing (32 previous + 3 new). `uv run
+ruff check backend`: clean.

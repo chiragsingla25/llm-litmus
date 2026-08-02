@@ -9,7 +9,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from app.registry.prompt_templates import MMLU_MULTIPLE_CHOICE_V1, render_mmlu_multiple_choice_v1
+from app.registry.prompt_templates import (
+    MMLU_MULTIPLE_CHOICE_V1,
+    TRUTHFULQA_GENERATION_V1,
+    render_mmlu_multiple_choice_v1,
+    render_truthfulqa_generation_v1,
+)
 
 
 @dataclass(frozen=True)
@@ -35,6 +40,18 @@ def _mmlu_item_to_gold(row: dict[str, Any]) -> dict[str, Any]:
     return {"answer_letter": "ABCD"[row["answer"]]}
 
 
+def _truthfulqa_item_to_prompt(row: dict[str, Any]) -> str:
+    return render_truthfulqa_generation_v1(row["question"])
+
+
+def _truthfulqa_item_to_gold(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "best_answer": row["best_answer"],
+        "correct_answers": row["correct_answers"],
+        "incorrect_answers": row["incorrect_answers"],
+    }
+
+
 TESTS: dict[str, Test] = {
     "mmlu_elementary_math": Test(
         id="mmlu_elementary_math",
@@ -46,5 +63,16 @@ TESTS: dict[str, Test] = {
         scorer_name="multiple_choice_match",
         item_to_prompt=_mmlu_item_to_prompt,
         item_to_gold=_mmlu_item_to_gold,
+    ),
+    "truthfulqa_generation": Test(
+        id="truthfulqa_generation",
+        dataset_source="truthfulqa/truthful_qa",
+        dataset_config="generation",
+        dataset_split="validation",
+        prompt_template=TRUTHFULQA_GENERATION_V1,
+        scoring_type="judge",
+        scorer_name="truthfulqa_judge",
+        item_to_prompt=_truthfulqa_item_to_prompt,
+        item_to_gold=_truthfulqa_item_to_gold,
     ),
 }
