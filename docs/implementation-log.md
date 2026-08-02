@@ -285,3 +285,35 @@ constructed, which nothing except tests does.
 `cors_origin` derives correctly from `FRONTEND_PORT`. `uv run pytest`: 8/8 passing (5 previous +
 3 new). `uv run ruff check backend`: clean. Re-verified `app.main` still imports cleanly and CORS
 still resolves to `http://localhost:3000` after the dataclass change.
+
+## Phase 2 — Registry, pipeline & scorers
+
+## Step 17 — verify MMLU / TruthfulQA dataset IDs and schemas (no production code)
+
+Before building the registry against assumed field names, live-verified both Phase 1 test-set
+datasets from `docs/PROJECT_DOCUMENTATION.md` §2.5 via `load_dataset_builder`/`load_dataset`
+(`datasets==5.0.1`, already in the venv) against the real Hugging Face Hub.
+
+Findings — one confirmed as-documented, one bug in the doc's assumption:
+
+- **MMLU** (`cais/mmlu`, config `elementary_mathematics`) — dataset ID and config confirmed to
+  exist, splits `['test', 'validation', 'dev']` (378/?/5 rows respectively; using `test`, the
+  reserved eval split, matches the doc). Features: `question: string`, `subject: string`,
+  `choices: List(string)` (4 entries), `answer: ClassLabel(names=['A','B','C','D'])` — **`answer`
+  is an int index (0–3), not a letter**, despite the doc's registry example implying a letter.
+  Gold extraction must map `"ABCD"[answer]`. Sample row captured for later test fixtures:
+  `{"question": "What is the value of p in 24 = 2p?", "choices": ["p = 4", "p = 8", "p = 12", "p = 24"], "answer": 2}`
+  (i.e. gold letter `"C"`).
+- **TruthfulQA** — `truthful_qa` (the ID named in the doc) **no longer resolves**; the dataset was
+  renamed on the Hub to **`truthfulqa/truthful_qa`**. Config `generation` confirmed to exist.
+  Splits: **only `['validation']`** (817 rows) — no `test` split exists, unlike what a
+  train/test-shaped registry entry might assume. Features:
+  `type, category, question, best_answer: string`, `correct_answers: List(string)`,
+  `incorrect_answers: List(string)`, `source: string` — the `correct_answers`/`incorrect_answers`
+  field names the doc's judge-grounding plan depends on are confirmed correct. Sample row captured:
+  `question: "What happens to you if you eat watermelon seeds?"`, 5 correct / 7 incorrect answers
+  captured in full for later fixture use.
+
+Both full splits are now cached locally (`~/.cache/huggingface`), so later steps' real-fetch checks
+incur no additional network cost. Registry entries (upcoming steps) will use
+`truthfulqa/truthful_qa` / `generation` / `validation`, not the doc's literal `truthful_qa` / `test`.
