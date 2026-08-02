@@ -2,7 +2,7 @@ import asyncio
 import json
 from unittest.mock import patch
 
-from app.core.providers import BaseLLMProvider, GenerationResult
+from app.core.providers import BaseLLMProvider, GenerationResult, ModelInfo
 from app.database import create_run, get_connection, get_responses_for_run, get_run, init_db
 from app.evaluations.run_loop import run_test
 
@@ -66,7 +66,8 @@ class FakeProvider(BaseLLMProvider):
         raise NotImplementedError("not exercised by run_loop tests")
 
     async def get_model_info(self, model):
-        raise NotImplementedError("not exercised by run_loop tests")
+        quant = "FAKE_TARGET_Q4" if model == self._target_model else "FAKE_JUDGE_Q4"
+        return ModelInfo(quantization_level=quant, parameter_size="1B")
 
 
 def _init_db(db_path):
@@ -114,6 +115,7 @@ def test_run_test_mmlu_end_to_end_with_pass_and_fail(tmp_path):
         ).fetchall()
 
     assert run["status"] == "complete"
+    assert run["target_quantization"] == "FAKE_TARGET_Q4"
     assert len(responses) == 2
     assert responses[0]["item_index"] == 0
     assert responses[1]["item_index"] == 1
@@ -171,6 +173,8 @@ def test_run_test_truthfulqa_end_to_end_with_judge(tmp_path):
         ).fetchall()
 
     assert run["status"] == "complete"
+    assert run["target_quantization"] == "FAKE_TARGET_Q4"
+    assert run["judge_quantization"] == "FAKE_JUDGE_Q4"
     assert len(scores) == 2
     assert bool(scores[0]["passed"]) is True
     assert bool(scores[1]["passed"]) is False

@@ -599,3 +599,49 @@ assertion, plus that the judge's rationale text round-trips into the `scores` ro
 path** (`FakeProvider` configured to raise mid-`generate_pass`) — asserts `status == "failed"`
 and the exception message lands in `runs.error`. `uv run pytest`: 51/51 passing (48 previous + 3
 new). `uv run ruff check backend`: the `BLE001` suppression above, otherwise clean.
+
+## Step 29 — minimal FastAPI endpoint (with a Step 28 amendment)
+
+Found a real design gap while building this step: the plan's own emphasis for `POST /tests/run`
+was "synchronously calls `create_run(...)` so it can return `{run_id}` immediately" — but
+quantization capture (`get_model_info`, needed to populate `runs.target_quantization`/
+`judge_quantization`) requires awaiting real Ollama calls, which would contradict "immediately"
+and make the endpoint's test unable to guarantee zero Ollama/HF contact (the plan's own test
+requirement). Resolution: quantization capture moved into `run_test()` itself (Step 28,
+amended here, not redone as a new step) — fetched right at the start, before the `generating`
+status transition, via a new `update_run_quantization(conn, run_id, *, target_quantization=None,
+judge_quantization=None)` DB helper (added to `db.py`/`database/__init__.py`). This meant
+`backend/tests/test_run_loop.py`'s `FakeProvider.get_model_info` had to stop raising
+`NotImplementedError` (Step 28 assumed it was unreachable; it no longer is) and instead return a
+real distinguishable `ModelInfo` per model — both existing success-path tests extended with
+`target_quantization`/`judge_quantization` assertions as a result.
+
+`backend/app/router/runs.py`: `POST /tests/run` (`RunTestRequest` Pydantic model: `test_id`,
+`target_model`, `sample_size`, `judge_model?`) — 404s on an unknown `test_id`, synchronously
+creates the run row (`status="pending"`, quantization fields left `None` — filled in moments
+later by the now-amended `run_test`), schedules `run_test` via `BackgroundTasks`, returns
+`{"run_id": ...}` immediately. `GET /runs/{run_id}` returns the stored row as a dict, 404 if
+missing. Deliberately minimal — no listing, no cancellation, no allocator integration, per
+Phase 2's scope boundary.
+
+`backend/app/main.py`: added a `lifespan` context manager that calls `init_db` once at startup
+— without it, a fresh checkout's first request would 500 (no tables exist yet). Wired
+`router.runs` in alongside the existing `health` router.
+
+`backend/tests/test_runs_router.py`: a `client` fixture that (1) redirects `DB_PATH` to a
+`tmp_path` db via `monkeypatch.setenv` + constructing a fresh `Settings()` (only possible because
+of Step 20's `default_factory` testability fix — a stale, import-time-cached `Settings` couldn't
+be redirected this way), rebinding that fresh settings object into both `app.main` and
+`app.router.runs`'s module namespaces so the `lifespan` startup hook also targets the tmp
+database, and (2) monkeypatches `run_test` itself to an `AsyncMock` so the background task never
+touches Ollama/HF, matching the plan's requirement exactly. Four tests: 404 on unknown `test_id`,
+a real `run_id` back on success, `GET /runs/{id}` returns the right stored row, 404 on an unknown
+run id. `uv run pytest`: 55/55 passing (51 previous + 4 new). `uv run ruff check backend`: one
+import-order issue, fixed via `ruff check --fix`.
+
+Manual sanity check: imported the real `app.main:app` (no monkeypatching) and exercised it via a
+real `TestClient` session — `GET /health` returned `{"status": "ok"}`, both 404 paths behaved
+correctly, and the `lifespan` hook created a real `data/llm_litmus.db` against the actual project
+`config.json` path, confirming the whole wiring (lifespan → `init_db` → router → DB) works
+end-to-end, not just against the router test's redirected path. Deleted the resulting `data/`
+directory before committing, per the same convention as Step 18.

@@ -16,6 +16,7 @@ from app.database import (
     get_responses_for_run,
     insert_response,
     insert_score,
+    update_run_quantization,
     update_run_status,
 )
 from app.evaluations.scorer_factory import build_scorer
@@ -96,6 +97,16 @@ async def run_test(
 
     with get_connection(db_path) as conn:
         try:
+            target_info = await provider.get_model_info(target_model)
+            judge_info = await provider.get_model_info(judge_model) if judge_model else None
+            update_run_quantization(
+                conn,
+                run_id,
+                target_quantization=target_info.quantization_level,
+                judge_quantization=judge_info.quantization_level if judge_info else None,
+            )
+            conn.commit()
+
             update_run_status(conn, run_id, "generating")
             conn.commit()
 

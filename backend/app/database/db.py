@@ -72,6 +72,19 @@ def get_run(conn: sqlite3.Connection, run_id: int) -> sqlite3.Row | None:
     return conn.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
 
 
+def update_run_quantization(
+    conn: sqlite3.Connection,
+    run_id: int,
+    *,
+    target_quantization: str | None = None,
+    judge_quantization: str | None = None,
+) -> None:
+    conn.execute(
+        "UPDATE runs SET target_quantization = ?, judge_quantization = ? WHERE id = ?",
+        (target_quantization, judge_quantization, run_id),
+    )
+
+
 def insert_response(
     conn: sqlite3.Connection,
     *,
