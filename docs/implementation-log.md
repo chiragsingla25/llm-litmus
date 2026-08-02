@@ -560,3 +560,42 @@ same real "watermelon seeds" row as Step 23 — the rubric renders with the ques
 response text, and both reference-answer lists all present in the final prompt. `uv run pytest`:
 48/48 passing (44 previous + 4 new). `uv run ruff check backend`: one import-order issue, fixed
 via `ruff check --fix`.
+
+## Step 28 — two-pass run orchestration
+
+The key integration step, tying together everything from Steps 20–27.
+
+`backend/app/evaluations/run_loop.py`: `generate_pass` (Phase A — iterates fetched items,
+computes `prompt`/`gold_reference` from the registry `Test`'s callables, calls
+`provider.generate_response(target_model, prompt, temperature=0.0)`, `insert_response`s each
+one) and `score_pass` (Phase B — loads stored responses via `get_responses_for_run`, builds
+`ScoreItem`s from them, `await`s `scorer.score(items)` from `build_scorer()`, `insert_score`s
+each result). `run_test()` ties them together: `update_run_status` transitions
+`generating`→`scoring`→`complete`, with an explicit `conn.commit()` after *every* status
+transition and pass — not just relying on `get_connection`'s single commit-on-clean-exit, since
+a poller (the future `GET /runs/{id}`, Step 13) needs to see interim progress, and a mid-run
+crash must not lose the status transitions already made.
+
+Design note worth flagging: the `except Exception` in `run_test` is deliberately broad
+(suppressed with `# noqa: BLE001` + a comment) — this is the top-level orchestrator for what
+will be a `BackgroundTasks`-scheduled call (Step 13), so nothing downstream could ever catch a
+propagated exception; the function's job is to convert *any* failure (provider, dataset fetch,
+scorer, DB) into a recorded `status="failed"` + `error` row, not to crash silently. Deliberately
+does not re-raise after recording.
+
+`scorer_version` (required by `insert_score`) uses `test.scorer_name` directly rather than an
+invented version string — no formal scorer-versioning scheme exists yet, and reusing the
+registry's own scorer identifier is more useful than a placeholder like `"v1"`.
+
+`backend/tests/test_run_loop.py`: a hand-rolled `FakeProvider(BaseLLMProvider)` — routes
+`generate_response` calls to one of two canned-response queues based on whether `model` matches
+the configured target or judge model name, since both the generation pass and the judge scoring
+pass call the exact same method. Three tests, `tmp_path` sqlite db, `load_test_items` mocked to
+return fixed rows: **MMLU end-to-end** (2 items, one correct answer and one wrong — asserts
+`status == "complete"`, responses stored in `item_index` order, gold references correctly
+precomputed, and scores showing an actual pass *and* fail, not just one or the other). **
+TruthfulQA end-to-end** (2 items, judge returns score 1 then score 0 — same pass/fail mix
+assertion, plus that the judge's rationale text round-trips into the `scores` row). **Failure
+path** (`FakeProvider` configured to raise mid-`generate_pass`) — asserts `status == "failed"`
+and the exception message lands in `runs.error`. `uv run pytest`: 51/51 passing (48 previous + 3
+new). `uv run ruff check backend`: the `BLE001` suppression above, otherwise clean.
