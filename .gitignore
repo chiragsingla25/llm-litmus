@@ -227,6 +227,9 @@ npm-debug.log*
 # run.sh runtime artifacts
 backend/.venv/
 
+# SQLite database (data/llm_litmus.db, per config.json db_path)
+/data/
+
 # macOS
 .DS_Store
 

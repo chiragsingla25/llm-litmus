@@ -1,11 +1,13 @@
 import json
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
 from app.core.config import Settings
 
 _CONFIG_JSON = json.loads((Path(__file__).resolve().parents[2] / "config.json").read_text())
 
-_ENV_VARS = ("OLLAMA_BASE_URL", "BACKEND_PORT", "FRONTEND_PORT", "DEFAULT_MODEL")
+_ENV_VARS = ("OLLAMA_BASE_URL", "BACKEND_PORT", "FRONTEND_PORT", "DEFAULT_MODEL", "DB_PATH")
 
 
 def _clear_env(monkeypatch):
@@ -21,6 +23,7 @@ def test_settings_defaults_come_from_config_json(monkeypatch):
     assert settings.BACKEND_PORT == _CONFIG_JSON["backend_port"]
     assert settings.FRONTEND_PORT == _CONFIG_JSON["frontend_port"]
     assert settings.DEFAULT_MODEL == _CONFIG_JSON["default_model"]
+    assert settings.DB_PATH == REPO_ROOT / _CONFIG_JSON["db_path"]
 
 
 def test_settings_env_vars_override_config_json(monkeypatch):
@@ -28,12 +31,14 @@ def test_settings_env_vars_override_config_json(monkeypatch):
     monkeypatch.setenv("OLLAMA_BASE_URL", "http://example.com:1234")
     monkeypatch.setenv("BACKEND_PORT", "9001")
     monkeypatch.setenv("DEFAULT_MODEL", "some-other-model:latest")
+    monkeypatch.setenv("DB_PATH", "/tmp/other.db")
 
     settings = Settings()
 
     assert settings.OLLAMA_BASE_URL == "http://example.com:1234"
     assert settings.BACKEND_PORT == 9001
     assert settings.DEFAULT_MODEL == "some-other-model:latest"
+    assert settings.DB_PATH == Path("/tmp/other.db")
     # Untouched field still falls back to config.json.
     assert settings.FRONTEND_PORT == _CONFIG_JSON["frontend_port"]
 

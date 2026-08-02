@@ -34,6 +34,11 @@ class Settings:
     DEFAULT_MODEL: str = field(
         default_factory=lambda: os.environ.get("DEFAULT_MODEL", _defaults["default_model"])
     )
+    DB_PATH: Path = field(
+        default_factory=lambda: Path(
+            os.environ.get("DB_PATH", str(_CONFIG_PATH.parent / _defaults["db_path"]))
+        )
+    )
 
     @property
     def cors_origin(self) -> str:

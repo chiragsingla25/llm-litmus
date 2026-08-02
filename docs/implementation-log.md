@@ -317,3 +317,33 @@ Findings — one confirmed as-documented, one bug in the doc's assumption:
 Both full splits are now cached locally (`~/.cache/huggingface`), so later steps' real-fetch checks
 incur no additional network cost. Registry entries (upcoming steps) will use
 `truthfulqa/truthful_qa` / `generation` / `validation`, not the doc's literal `truthful_qa` / `test`.
+
+## Step 18 — SQLite schema + connection/init helpers
+
+Added `backend/app/database/schema.py` (DDL for `runs`/`responses`/`scores`, matching the plan's
+schema exactly — `runs.test_id` so a stored run can be traced back to its registry `Test`,
+`target_quantization`/`judge_quantization` for CLAUDE.md's reproducibility requirement,
+`responses.gold_reference` as a JSON blob so re-scoring never needs to re-fetch HF,
+`scores.scorer_version` so re-scores are distinguishable from the original) and
+`backend/app/database/db.py` (`get_connection` — a context manager, `row_factory = sqlite3.Row`,
+`PRAGMA foreign_keys = ON`, creates the parent directory and commits on clean exit; `init_db` —
+runs the DDL via `executescript`, idempotent via `CREATE TABLE IF NOT EXISTS`).
+
+Added `db_path` to `config.json` (`"data/llm_litmus.db"`, relative to repo root) and `DB_PATH` to
+`Settings`, following the exact `field(default_factory=...)` + env-override pattern the other four
+fields already use — resolves to an absolute path via `_CONFIG_PATH.parent` (the same repo-root
+anchor `config.py` already uses), env override (`DB_PATH`) is taken as a literal path with no
+further resolution, matching how the other fields treat their env overrides. Added `/data/` to
+`.gitignore` (the SQLite file itself shouldn't be tracked).
+
+`backend/tests/test_database.py`: three tests using `tmp_path` — expected tables exist, FK pragma
+is on, `UNIQUE(run_id, item_index)` raises `sqlite3.IntegrityError` on a duplicate insert. Extended
+`test_config.py`'s existing three tests with `DB_PATH` assertions (defaults to
+`REPO_ROOT / config.json's db_path`, env-overridable). `uv run pytest`: 11/11 passing (8 previous +
+3 new). `uv run ruff check backend`: one import-order issue in the new test file, fixed via
+`ruff check --fix`.
+
+Manually verified against the real (non-tmp_path) `settings.DB_PATH`: resolves to
+`<repo_root>/data/llm_litmus.db`, `init_db` creates all three tables against it, file exists on
+disk afterward. Deleted the resulting `data/` directory before committing — it's gitignored
+runtime state, not something to check in.
