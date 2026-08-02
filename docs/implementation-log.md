@@ -370,3 +370,25 @@ test happened to get a *higher* autoincrement id than `response_id_1` — fixed 
 scores table's own `id` instead, which reflects insertion order.) `uv run pytest`: 14/14 passing
 (11 previous + 3 new). `uv run ruff check backend`: one import-order issue from the edit, fixed via
 `ruff check --fix`.
+
+## Step 20 — `BaseScorer` interface
+
+A network interruption caused this session to lose track of the detailed Phase 2 plan partway
+through (after Step 19/plan-step-3); recovered it from
+`~/.claude/plans/check-the-current-progress-cryptic-sky.md`, which had survived on disk. Resuming
+at plan-step-4.
+
+`backend/app/scorers/__init__.py`: `ScoreItem` (`response_id`, `response_text`,
+`gold_reference: dict`), `ScoreResult` (`response_id`, `score`, `passed`, `rationale`,
+`raw_judge_output` — defaults to `None` since only `JudgeScorer` populates it), `BaseScorer(ABC)`
+with `async def score(self, items) -> list[ScoreResult]` as the sole abstract method — `async`
+even though `DeterministicScorer` will await nothing internally, per the plan's rationale: this
+uniformity is exactly what keeps the run loop type-blind (`await scorer.score(items)` works
+identically for both scorer types).
+
+`backend/tests/test_scorers_base.py`: `BaseScorer()` raises `TypeError` (can't instantiate an ABC
+with an abstract method), dataclass field shapes for both `ScoreItem`/`ScoreResult`, and a
+`DummyScorer` concrete subclass proving the interface is actually usable end-to-end (instantiates,
+`await`s `.score(...)`, returns matching `ScoreResult`s). `uv run pytest`: 19/19 passing (14
+previous + 5 new). `uv run ruff check backend`: one import-order issue, fixed via `ruff check
+--fix`.
