@@ -1,7 +1,17 @@
+import json
 import sqlite3
 
 import pytest
-from app.database.db import get_connection, init_db
+from app.database.db import (
+    create_run,
+    get_connection,
+    get_responses_for_run,
+    get_run,
+    init_db,
+    insert_response,
+    insert_score,
+    update_run_status,
+)
 
 
 def _init_db(db_path):
@@ -51,3 +61,89 @@ def test_duplicate_item_index_for_same_run_is_rejected(tmp_path):
                 "VALUES (?, 0, 'p2', 'r2', '{}')",
                 (run_id,),
             )
+
+
+def test_run_response_score_round_trip(tmp_path):
+    db_path = _init_db(tmp_path / "test.db")
+
+    with get_connection(db_path) as conn:
+        run_id = create_run(
+            conn,
+            test_id="mmlu_elementary_math",
+            target_model="llama3.2:latest",
+            target_quantization="Q4_K_M",
+            prompt_template_version="mmlu_multiple_choice_v1",
+            sample_size=2,
+        )
+
+        # Insert out of natural order to prove get_responses_for_run sorts by item_index.
+        response_id_1 = insert_response(
+            conn,
+            run_id=run_id,
+            item_index=1,
+            prompt="second prompt",
+            response_text="B",
+            gold_reference={"answer_letter": "B"},
+        )
+        response_id_0 = insert_response(
+            conn,
+            run_id=run_id,
+            item_index=0,
+            prompt="first prompt",
+            response_text="A",
+            gold_reference={"answer_letter": "C"},
+        )
+
+        insert_score(
+            conn,
+            response_id=response_id_0,
+            scorer_version="multiple_choice_match_v1",
+            score=0.0,
+            passed=False,
+        )
+        insert_score(
+            conn,
+            response_id=response_id_1,
+            scorer_version="multiple_choice_match_v1",
+            score=1.0,
+            passed=True,
+        )
+
+        update_run_status(conn, run_id, "complete")
+
+        responses = get_responses_for_run(conn, run_id)
+        run = get_run(conn, run_id)
+        scores = conn.execute("SELECT * FROM scores ORDER BY id").fetchall()
+
+    assert [r["item_index"] for r in responses] == [0, 1]
+    assert json.loads(responses[0]["gold_reference"]) == {"answer_letter": "C"}
+    assert run["status"] == "complete"
+    assert run["target_quantization"] == "Q4_K_M"
+    assert [s["passed"] for s in scores] == [0, 1]
+
+
+def test_update_run_status_records_error(tmp_path):
+    db_path = _init_db(tmp_path / "test.db")
+
+    with get_connection(db_path) as conn:
+        run_id = create_run(
+            conn,
+            test_id="t",
+            target_model="m",
+            prompt_template_version="v1",
+            sample_size=1,
+        )
+        update_run_status(conn, run_id, "failed", error="boom")
+        run = get_run(conn, run_id)
+
+    assert run["status"] == "failed"
+    assert run["error"] == "boom"
+
+
+def test_get_run_returns_none_for_missing_id(tmp_path):
+    db_path = _init_db(tmp_path / "test.db")
+
+    with get_connection(db_path) as conn:
+        run = get_run(conn, 999)
+
+    assert run is None

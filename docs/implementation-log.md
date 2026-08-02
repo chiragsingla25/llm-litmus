@@ -347,3 +347,26 @@ Manually verified against the real (non-tmp_path) `settings.DB_PATH`: resolves t
 `<repo_root>/data/llm_litmus.db`, `init_db` creates all three tables against it, file exists on
 disk afterward. Deleted the resulting `data/` directory before committing — it's gitignored
 runtime state, not something to check in.
+
+## Step 19 — database CRUD helpers
+
+Extended `backend/app/database/db.py` with `create_run` (keyword-only, returns the new
+`lastrowid`), `update_run_status` (also bumps `updated_at`, takes an optional `error` for the
+`failed` path), `get_run` (returns `None` if missing — no exception, since "run not found" is a
+normal outcome the router will need to turn into a 404 in Step 13), `insert_response`
+(JSON-encodes `gold_reference` internally so callers pass a plain dict), `get_responses_for_run`
+(ordered by `item_index`), `insert_score` (`passed: bool | None` stored as `0`/`1`/`NULL` — sqlite
+has no native bool). Re-exported all of them from `database/__init__.py`.
+
+`backend/tests/test_database.py`: three new tests. A full round trip (create a run, insert two
+responses *out of natural order* to prove `get_responses_for_run` actually sorts rather than
+relying on insertion order, insert a score for each, update status) — asserts sort order, JSON
+round-trip on `gold_reference`, and that `target_quantization` persists correctly.
+`update_run_status` recording an `error` message on a `failed` transition. `get_run` returning
+`None` for a nonexistent id. (One assertion bug caught by actually running the test, not just
+writing it: ordering the `scores` query by `response_id` rather than the scores table's own `id`
+gave a result order that didn't match the intended insertion order, since `response_id_0` in the
+test happened to get a *higher* autoincrement id than `response_id_1` — fixed by ordering by the
+scores table's own `id` instead, which reflects insertion order.) `uv run pytest`: 14/14 passing
+(11 previous + 3 new). `uv run ruff check backend`: one import-order issue from the edit, fixed via
+`ruff check --fix`.
