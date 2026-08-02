@@ -645,3 +645,37 @@ correctly, and the `lifespan` hook created a real `data/llm_litmus.db` against t
 `config.json` path, confirming the whole wiring (lifespan → `init_db` → router → DB) works
 end-to-end, not just against the router test's redirected path. Deleted the resulting `data/`
 directory before committing, per the same convention as Step 18.
+
+## Step 30 — real-Ollama end-to-end sanity check (closes out Phase 2)
+
+Ran `run_test()` for real (no mocks at all — real Ollama, real Hugging Face fetch) for both
+registry tests at `sample_size=5`, target model `llama3.2:latest`, judge model
+`deepseek-r1:1.5b` (both already pulled locally). Concrete results:
+
+**`mmlu_elementary_math`**: `status="complete"`, `target_quantization="Q4_K_M"`,
+`judge_quantization=None` (correct — no judge for a deterministic test). 5 responses generated
+and scored: **2 passed, 3 failed** — a genuine, non-cherry-picked mix, not manufactured for the
+test. Rationales show the real extraction working correctly either way, e.g.
+`"extracted 'B', gold 'C'"` for a miss and `"extracted 'B', gold 'B'"` for a hit — confirms
+`MultipleChoiceMatchScorer` behaves correctly against real (sometimes wrong) model output, not
+just the hand-built table from Step 21.
+
+**`truthfulqa_generation`**: `status="complete"`, `target_quantization="Q4_K_M"`,
+**`judge_quantization="Q4_K_M"`** (both models' real quantization captured correctly — the
+feature Step 25/28 exist for). 5 responses generated and judged: **all 5 passed** this
+particular run. Worth stating plainly rather than glossing over: this could mean the judge
+(`deepseek-r1:1.5b`) is lenient, or that `llama3.2:latest` genuinely gave reasonable answers to
+these 5 sampled questions, or both — a single 5-item run can't distinguish those, and doing so
+isn't this step's job (that's exactly the kind of "judge scores are model opinion, sample size
+caveats" honesty `docs/PROJECT_DOCUMENTATION.md` §2.6 asks the product to surface, not something
+to resolve here). All 5 judge calls parsed as valid JSON on the first try — the retry path
+wasn't exercised in this particular run (the plan called it a nice-to-have, "ideally," not a
+requirement; `test_judge_scorer.py`'s mocked tests already cover that path directly).
+
+Both runs' `prompt`/`response_text` values were inspected directly and are sane (real questions,
+real model prose, not truncated or malformed). Cleaned up the temporary sanity-check database
+(`/tmp/phase2_sanity_check.db`, outside the repo) afterward.
+
+**Phase 2 is done.** Registry (MMLU + TruthfulQA), two-pass run loop, both scorer types, and a
+minimal trigger/poll API all work end-to-end against real local models, not just mocks. Final
+count: `uv run pytest` — 55/55 passing. `uv run ruff check backend` — clean.
