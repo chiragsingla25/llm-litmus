@@ -413,3 +413,25 @@ C") would otherwise get scored on the first letter mentioned (`A`) rather than t
 fallback-to-last-letter, no-letter-present) plus a rationale-content check — pure unit tests, no
 mocking, per the plan. `uv run pytest`: 29/29 passing (19 previous + 10 new). `uv run ruff check
 backend`: one import-order issue, fixed via `ruff check --fix`.
+
+## Step 22 — Registry: `Test` dataclass + prompt templates + MMLU entry
+
+`backend/app/registry/prompt_templates.py`: `MMLU_MULTIPLE_CHOICE_V1` version tag +
+`render_mmlu_multiple_choice_v1(question, choices)`. Versioned by name (`_v1` suffix) per
+CLAUDE.md — changing the wording later means adding a `_v2`, not editing this one in place, since
+`prompt_template` is recorded with every run.
+
+`backend/app/registry/__init__.py`: `Test` frozen dataclass (`id`, `dataset_source`,
+`dataset_config`, `dataset_split`, `prompt_template`, `scoring_type`, `scorer_name`,
+`item_to_prompt`, `item_to_gold`) and `TESTS: dict[str, Test]`. `scorer_name` is a plain string
+("multiple_choice_match"), never a class reference — resolved later by `scorer_factory` (Step
+11/plan) — keeping the registry pure data, per doc §2.4. Added `mmlu_elementary_math` using the
+corrected gold-extraction from Step 17 (`"ABCD"[row["answer"]]`, since MMLU's `answer` is an int
+ClassLabel, not a letter).
+
+`backend/tests/test_registry.py` uses the *real* sample row captured live in Step 17
+(`{"question": "What is the value of p in 24 = 2p?", "choices": [...], "answer": 2}`), not a
+hand-invented one — asserts the registry entry's metadata, an **exact** string match on the
+rendered prompt (not just a substring check, to genuinely lock down the template), and that
+`answer=2` maps to gold letter `"C"`. `uv run pytest`: 32/32 passing (29 previous + 3 new).
+`uv run ruff check backend`: clean.
