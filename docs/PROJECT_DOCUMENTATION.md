@@ -108,7 +108,7 @@ This one decision solves three problems at once:
 | Frontend UI | Next.js (React) + Recharts | Test selection, time-budget slider, results dashboard |
 | Backend | FastAPI + `asyncio` | API layer, background task orchestration |
 | Test Registry | Plain Python declarations (dataclasses or YAML) | The extension point: dataset source, scoring type, scorer config per test |
-| Model interface | `BaseLLMProvider` abstraction; `LocalOllamaProvider` is the only Phase 1 implementation | Same interface a cloud provider would implement in a later phase |
+| Model interface | `BaseLLMProvider` abstraction; `LocalOllamaProvider` is the only Phase 1 implementation | Same interface a cloud provider would implement in a later phase; `get_model_info` reports each model's already-baked-in quantization for reproducibility metadata only — the app never selects or applies a quantization level |
 | Deterministic scoring | Plain Python | One small function per scorer type (e.g. multiple-choice match) |
 | Judge scoring | Structured-output prompting against a user-selected local model | Grounded rubric score + short rationale, JSON-validated with retry-on-parse-failure |
 | Dataset sourcing | Hugging Face `datasets` with default local caching (small configs/splits — no streaming complexity needed) | Fetched once anonymously, cached; no token, datasets are public and ungated |
@@ -268,6 +268,7 @@ Why it's cheap by then: it reuses `JudgeScorer`, the provider interface, storage
 2. **Fine-tuned dedicated judge model** (stretch) — after the prompted judge's limitations are understood in practice.
 3. **Agentic red-teaming** (stretch) — attacker/critic loop probing the target model; separate module.
 4. **Live production monitoring** — explicitly considered and deferred; this is a local test runner, not an observability platform.
+5. **Quantization expectation/validation** (stretch) — let the user optionally specify an expected/preferred quantization level for a run; if the resolved model tag's reported `quantization_level` (via `get_model_info`) doesn't match, warn or block instead of silently running it. Ollama has no request-time quantization control — true quantization selection means picking a different pre-quantized model tag (e.g. `-q4_0` vs `-q8_0`), not converting a model on the fly.
 
 ---
 

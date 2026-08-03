@@ -9,7 +9,7 @@ Full design doc: `docs/PROJECT_PLAN.md`. Read it before large changes.
 - **Two-pass run loop.** Phase A: generate all target-model responses for a test, store raw responses in SQLite. Phase B: score stored responses. Never interleave generation and judge calls (forces Ollama model reloads).
 - **Test Registry pattern.** Tests are declarative entries (dataset source, prompt template, scoring_type, scorer). The run loop, allocator, storage, and dashboard are type-blind — they iterate registered tests and call `scorer.score()`. Never branch on a specific test/dataset name outside the registry and scorers.
 - **Two scorer types, one interface.** `BaseScorer.score(items) -> list[ScoreResult]`. `DeterministicScorer` = pure function, no model calls. `JudgeScorer` = batched calls to a user-selected local judge model, grounded rubric prompt, JSON output validated with retry-on-parse-failure. Only the scorer classes, the allocator (1x vs 2x call cost), and dashboard labels may be type-aware.
-- **Provider abstraction.** All model access via `BaseLLMProvider` (`generate_response`, `test_speed`). `LocalOllamaProvider` is the only implementation for now.
+- **Provider abstraction.** All model access via `BaseLLMProvider` (`generate_response`, `test_speed`, `get_model_info`). `LocalOllamaProvider` is the only implementation for now. `get_model_info` reports quantization already baked into a pulled model tag (for reproducibility metadata) — the app never selects or applies quantization itself.
 
 ## Stack & conventions
 

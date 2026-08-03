@@ -803,3 +803,21 @@ covering the same behavior via `test_run_loop.py`'s existing `target_quantizatio
 `judge_quantization` assertions, which don't reference the function by name). `uv run ruff check
 backend`: clean. Confirmed via a second `grep` pass that no reference to the old name survives
 anywhere in `backend/`.
+
+## Step 36 — quantization docs clarity + backlog entry
+
+Two small, closely-related doc edits, combined into one commit (the plan listed them as separate
+steps, but splitting a same-topic two-line doc change across two commits added no real value).
+
+`CLAUDE.md`'s "Provider abstraction" bullet didn't mention `get_model_info` at all — it predates
+Phase 2, which is when that method was added. Extended it to name `get_model_info` alongside
+`generate_response`/`test_speed`, and added the same clarification as Step 35's docstring: it
+reports quantization already baked into a pulled model tag, the app never selects or applies it.
+`docs/PROJECT_DOCUMENTATION.md` §2.3's "Model interface" table row got the same clarification
+appended to its "Function" column.
+
+Also added item 5 to §"Later phases (beyond Phase 2, in order)": optional expected/preferred
+quantization validation (warn or block on mismatch) — explicitly noting Ollama has no
+request-time quantization control, so "selecting" quantization in that future feature would mean
+picking a different pre-quantized model tag, not runtime conversion. Docs-only; `uv run pytest`
+still 57/57.
