@@ -786,3 +786,20 @@ outputs — confirmed the new DataFrame cell renders with real columns
 (`test_id`/`dataset_source`/`dataset_config`/`dataset_split`/`prompt_template` plus MMLU's own
 `question`/`subject`/`choices`/`answer`) and real sampled rows, not placeholder data. `uv run
 pytest`: still 57/57 (no backend code touched by this step).
+
+## Step 35 — rename `update_run_quantization` → `record_run_quantization`
+
+User flagged the name as misleading: `update_run_quantization` implies the app is setting or
+controlling quantization, when it only backfills a column with whatever Ollama already reports
+via `get_model_info`'s `POST /api/show` — models are pre-quantized at `ollama pull` time, this
+function has no influence over that.
+
+Renamed across all 4 real usage sites (confirmed via `grep`, no test referenced the old name
+directly): `backend/app/database/db.py` (definition, now with a clarifying docstring spelling out
+exactly this — "never selects, requests, or applies a quantization level"),
+`backend/app/database/__init__.py` (import + `__all__`), `backend/app/evaluations/run_loop.py`
+(import + call site). Pure rename, no behavior change — `uv run pytest` still 57/57 (same tests,
+covering the same behavior via `test_run_loop.py`'s existing `target_quantization`/
+`judge_quantization` assertions, which don't reference the function by name). `uv run ruff check
+backend`: clean. Confirmed via a second `grep` pass that no reference to the old name survives
+anywhere in `backend/`.

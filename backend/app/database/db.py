@@ -72,13 +72,17 @@ def get_run(conn: sqlite3.Connection, run_id: int) -> sqlite3.Row | None:
     return conn.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
 
 
-def update_run_quantization(
+def record_run_quantization(
     conn: sqlite3.Connection,
     run_id: int,
     *,
     target_quantization: str | None = None,
     judge_quantization: str | None = None,
 ) -> None:
+    """Records the quantization Ollama already reports for each model (via get_model_info's
+    POST /api/show) onto the run row. Models are pre-quantized at `ollama pull` time -- this
+    only backfills metadata for reproducibility, it never selects, requests, or applies a
+    quantization level."""
     conn.execute(
         "UPDATE runs SET target_quantization = ?, judge_quantization = ? WHERE id = ?",
         (target_quantization, judge_quantization, run_id),
