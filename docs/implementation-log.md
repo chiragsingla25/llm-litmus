@@ -862,3 +862,23 @@ exceeds the configured limit (tracked via a shared counter across 10 tasks bound
 exception from one coroutine is returned in-place, not raised, and doesn't affect the others'
 results. `uv run pytest`: 60/60 passing (57 previous + 3 new). `uv run ruff check backend`:
 clean.
+
+## Step 38 — timeout + concurrency config settings
+
+Added `ollama_request_timeout_seconds` (default `300`) and `ollama_max_concurrent_requests`
+(default `3`) to `config.json`, and `OLLAMA_REQUEST_TIMEOUT_SECONDS`/
+`OLLAMA_MAX_CONCURRENT_REQUESTS` to `Settings` (`backend/app/core/config.py`) — same
+`field(default_factory=...)` + env-override pattern as every other field, established in Step 20
+specifically so `Settings()` is re-testable per-instance.
+
+`300` for the timeout is deliberately generous: the diagnosed run's failing item was still
+decoding past 5,391 tokens (and had already triggered a context-window shift) when the old 120s
+ceiling cut it off — `deepseek-r1:1.5b`'s reasoning traces can run long. `3` for concurrency is
+a conservative starting default now that Step 37's helper exists to actually use it (Steps
+39-42 wire it in) — user confirmed Ollama's own server-side scheduling auto-adjusts, so this
+app's job is just to offer concurrent requests, not to tune server-side parallelism itself.
+
+`backend/tests/test_config.py`: extended (not new) — both new fields added to the existing
+defaults-from-config.json test and the env-override test, following the exact established
+pattern rather than writing a separate test function per field. `uv run pytest`: still 60/60 (no
+new test count — same three test functions, more assertions). `uv run ruff check backend`: clean.
