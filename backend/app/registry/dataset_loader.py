@@ -10,11 +10,13 @@ from datasets import load_dataset
 from app.registry import Test
 
 
-def load_test_items(test: Test, sample_size: int) -> list[dict]:
+def load_test_items(test: Test, sample_size: int | None = None) -> list[dict]:
+    """Fetches a test's items. `sample_size=None` means "use the full test" -- every row in
+    the dataset's registered split."""
     dataset = load_dataset(test.dataset_source, test.dataset_config, split=test.dataset_split)
     # Deterministic first-N slice -- no seed dependency, so re-running the same
     # model/settings reproduces the same sample, per CLAUDE.md's reproducibility rule.
-    n = min(sample_size, len(dataset))
+    n = len(dataset) if sample_size is None else min(sample_size, len(dataset))
     return [dataset[i] for i in range(n)]
 
 

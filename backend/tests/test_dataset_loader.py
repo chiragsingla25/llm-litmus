@@ -32,6 +32,16 @@ def test_load_test_items_caps_at_dataset_length():
     assert items == rows
 
 
+def test_load_test_items_none_sample_size_returns_full_dataset():
+    rows = [{"question": f"q{i}"} for i in range(12)]
+
+    with patch("app.registry.dataset_loader.load_dataset", return_value=_fake_dataset(rows)):
+        items = load_test_items(TESTS["mmlu_elementary_math"], sample_size=None)
+
+    assert items == rows
+    assert len(items) == 12
+
+
 def test_load_test_items_uses_truthfulqa_registry_fields():
     rows = [{"question": "q0"}, {"question": "q1"}]
 

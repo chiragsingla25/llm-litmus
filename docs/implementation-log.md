@@ -906,3 +906,16 @@ correctly-named `OllamaUnreachableError`.
 one explicit regression test mocking `httpx.ConnectError` to confirm that case still raises
 `OllamaUnreachableError`, not swallowed by the new timeout handling. `uv run pytest`: 63/63
 passing (60 previous + 3 new). `uv run ruff check backend`: clean.
+
+## Step 40 — optional `sample_size` in `load_test_items`
+
+`load_test_items(test, sample_size: int | None = None)` — `None` now means "use the full test":
+`n = len(dataset) if sample_size is None else min(sample_size, len(dataset))`. First piece of
+the user's explicit request ("if sample size is not provided, it takes the original test size").
+
+`backend/tests/test_dataset_loader.py`: one new test confirming `sample_size=None` returns every
+mocked row. Also verified against the real (already-cached) MMLU dataset directly:
+`load_test_items(TESTS["mmlu_elementary_math"], sample_size=None)` → 378 items, matching the
+count Step 17 confirmed live against the real Hugging Face dataset months ago in this log — a
+nice independent cross-check that both findings agree. `uv run pytest`: 64/64 passing (63
+previous + 1 new). `uv run ruff check backend`: clean.
