@@ -1,4 +1,5 @@
 import pytest
+from app.core.config import settings
 from app.core.providers import LocalOllamaProvider
 from app.evaluations.scorer_factory import build_scorer
 from app.registry import TESTS
@@ -41,6 +42,7 @@ def test_build_scorer_returns_judge_for_truthfulqa():
         judge_model="some-judge",
     )
     assert isinstance(scorer, JudgeScorer)
+    assert scorer._concurrency == settings.OLLAMA_MAX_CONCURRENT_REQUESTS
 
 
 def test_build_scorer_judge_requires_provider_and_model():

@@ -3,6 +3,7 @@ label, allowed to branch on a Test's scoring_type/scorer_name, per
 docs/PROJECT_DOCUMENTATION.md section 2.4.
 """
 
+from app.core.config import settings
 from app.core.providers import BaseLLMProvider
 from app.registry import Test
 from app.scorers import BaseScorer
@@ -37,6 +38,11 @@ def build_scorer(
             raise ValueError(f"Unknown judge scorer: {test.scorer_name!r}")
         if provider is None or judge_model is None:
             raise ValueError("Judge scoring requires both provider and judge_model")
-        return JudgeScorer(provider=provider, judge_model=judge_model, rubric_template=rubric)
+        return JudgeScorer(
+            provider=provider,
+            judge_model=judge_model,
+            rubric_template=rubric,
+            concurrency=settings.OLLAMA_MAX_CONCURRENT_REQUESTS,
+        )
 
     raise ValueError(f"Unknown scoring_type: {test.scoring_type!r}")

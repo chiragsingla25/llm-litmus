@@ -960,3 +960,16 @@ prompt content (each item's `response_text` is distinct) to return the right can
 regardless of call order — then asserts `results` come back in the same order as the input
 `items` list, not completion order. `uv run pytest`: 67/67 passing (66 previous + 1 new). `uv
 run ruff check backend`: clean.
+
+## Step 43 — thread concurrency through `scorer_factory`
+
+`build_scorer`'s judge branch now passes `concurrency=settings.OLLAMA_MAX_CONCURRENT_REQUESTS`
+into `JudgeScorer(...)`, so the config value from Step 38 actually reaches the scorer that uses
+it (Step 42 added the parameter but nothing was wiring it from config yet).
+
+`backend/tests/test_scorer_factory.py`: extended the existing
+`test_build_scorer_returns_judge_for_truthfulqa` with one assertion —
+`scorer._concurrency == settings.OLLAMA_MAX_CONCURRENT_REQUESTS` — rather than a new test
+function, since it's checking one more property of the same already-tested construction. `uv
+run pytest`: still 67/67 (same function count, one more assertion). `uv run ruff check backend`:
+clean.
