@@ -973,3 +973,50 @@ it (Step 42 added the parameter but nothing was wiring it from config yet).
 function, since it's checking one more property of the same already-tested construction. `uv
 run pytest`: still 67/67 (same function count, one more assertion). `uv run ruff check backend`:
 clean.
+
+## Step 44 — `run_test`: optional `sample_size`, concurrent `generate_pass`, partial scoring
+
+The core rewrite tying together every prior step in this session's fix.
+
+`generate_pass` no longer loops sequentially — precomputes all prompts, builds all
+`generate_response` coroutines, runs them through Step 37's `gather_with_concurrency`
+(concurrency from `settings.OLLAMA_MAX_CONCURRENT_REQUESTS`), inserts a response for each
+success, and **returns** the list of exceptions from failures instead of raising — so a failure
+partway through no longer aborts the items that succeeded alongside it (which, under
+concurrency, aren't necessarily a clean prefix anymore — a failure can land anywhere in the
+batch).
+
+`run_test`: `sample_size` is now optional (`None` → full test, passed straight through to
+`load_test_items`); the actual resolved count is backfilled via `record_run_sample_size`
+immediately after loading, before generation even starts, so it's correct even if generation
+later fails entirely. After `generate_pass` returns, checks whether *any* response exists
+(`get_responses_for_run`):
+- **Zero responses** (every item failed) → re-raises the first error, falling into the existing
+  outer handler, `status="failed"` — unchanged from before.
+- **Any responses exist** → proceeds to `score_pass` on them regardless of the error count, then
+  sets `status="complete"` if there were no errors, or the new `status="partial"` (with a
+  summary like `"2/4 items failed to generate; first error: ..."` in `runs.error`) if some did.
+  This is the direct fix for the diagnosed incident: 78 good responses would have been scored
+  and the run marked `partial`, instead of 0 scores and `status="failed"`.
+
+`backend/tests/test_run_loop.py`: the `FakeProvider` had to change from
+`iter(target_responses)`/call-order-based dispatch to prompt-content matching (a dict of
+substring → canned response, matching the technique already used for `JudgeScorer`'s concurrent
+test) — call order across items is no longer meaningful once `generate_pass` runs them
+concurrently. Five tests: the two existing end-to-end cases (MMLU pass/fail mix, TruthfulQA with
+judge) adapted to the new `FakeProvider`; `sample_size=None` processes a full 6-item mocked
+dataset and backfills `sample_size=6`; a **partial failure** case (4 items, 2 fail — deliberately
+non-adjacent indices 1 and 3, not a prefix, to prove concurrent/scattered failures are handled)
+asserts `status="partial"`, the error summary, and that exactly the 2 successful items (0 and 2)
+got both a response and a score; a **total failure** case (both items fail) asserts `status`
+stays `"failed"` with zero responses/scores, unchanged behavior. `uv run pytest`: 69/69 passing
+(67 previous + 2 net — 3 old tests replaced by 5 new ones). `uv run ruff check backend`: clean
+(one line-length-only fix, same `E501`-not-in-default-ruleset situation as Step 33).
+
+Real (unmocked) verification against live Ollama: `run_test` for `mmlu_elementary_math`,
+`deepseek-r1:1.5b`, `sample_size=6`, no mocks at all — `status="complete"`, `sample_size=6`
+correctly backfilled, 6 responses stored, finished in 75.2s. Faster than the ~90-180s a strictly
+sequential run would be expected to take at this model's observed per-item latency (10-30s each,
+per Step 37's diagnosis) — consistent with real concurrent execution happening, not just
+requests queuing one-at-a-time at Ollama, though a precise apples-to-apples sequential-vs-
+concurrent timing comparison on identical items wasn't run.
