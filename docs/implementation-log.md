@@ -942,3 +942,21 @@ previous + 2 new). `uv run ruff check backend`: clean.
 Note: the real local `data/llm_litmus.db` still has the old `NOT NULL` constraint baked in
 (`CREATE TABLE IF NOT EXISTS` doesn't retroactively alter existing tables) — deleting it and
 letting `init_db` regenerate it fresh is part of Step 45's real verification.
+
+## Step 42 — concurrent `JudgeScorer.score()`
+
+`score()` previously did `[await self._score_one(item) for item in items]` — sequential, same
+zero-concurrency problem as `generate_pass`. Now uses Step 37's `gather_with_concurrency`. No
+new failure-handling needed here specifically: `_score_one` already never raises (parse failures
+become `JUDGE_PARSE_FAILED` results, not exceptions), so this purely adds concurrency with no
+new exception surface to handle. New `concurrency: int = 3` constructor param (Step 43 wires
+`settings.OLLAMA_MAX_CONCURRENT_REQUESTS` through via `scorer_factory`).
+
+`backend/tests/test_judge_scorer.py`: one new test with 5 items and `concurrency=2` — the
+existing `_fake_provider` helper (canned responses consumed in call order via `side_effect`
+list) no longer works once multiple items run concurrently, since call order across *different*
+items isn't deterministic anymore. Replaced with a `fake_generate` that inspects the actual
+prompt content (each item's `response_text` is distinct) to return the right canned answer
+regardless of call order — then asserts `results` come back in the same order as the input
+`items` list, not completion order. `uv run pytest`: 67/67 passing (66 previous + 1 new). `uv
+run ruff check backend`: clean.

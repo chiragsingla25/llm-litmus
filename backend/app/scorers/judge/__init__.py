@@ -9,6 +9,7 @@ take down an entire scoring pass.
 import json
 import re
 
+from app.core.concurrency import gather_with_concurrency
 from app.core.providers import BaseLLMProvider
 from app.scorers import BaseScorer, ScoreItem, ScoreResult
 
@@ -50,14 +51,20 @@ class JudgeScorer(BaseScorer):
         judge_model: str,
         rubric_template: str,
         max_retries: int = 1,
+        concurrency: int = 3,
     ) -> None:
         self._provider = provider
         self._judge_model = judge_model
         self._rubric_template = rubric_template
         self._max_retries = max_retries
+        self._concurrency = concurrency
 
     async def score(self, items: list[ScoreItem]) -> list[ScoreResult]:
-        return [await self._score_one(item) for item in items]
+        # _score_one never raises (parse failures become JUDGE_PARSE_FAILED results), so no
+        # Exception-checking is needed on the results here -- concurrency is the only change.
+        return await gather_with_concurrency(
+            self._concurrency, [self._score_one(item) for item in items]
+        )
 
     async def _score_one(self, item: ScoreItem) -> ScoreResult:
         prompt = self._rubric_template.format(

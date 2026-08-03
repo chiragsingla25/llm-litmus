@@ -89,3 +89,34 @@ def test_json_inside_markdown_fences():
     assert results[0].score == 1.0
     assert results[0].passed is True
     assert results[0].rationale == "ok"
+
+
+def test_multiple_items_scored_concurrently_preserve_order():
+    # Concurrency means call order across items is no longer deterministic, so the fake
+    # provider must respond based on prompt content, not call sequence -- and results must
+    # still come back in the same order as the input items regardless.
+    items = [
+        ScoreItem(
+            response_id=i,
+            response_text=f"response-{i}",
+            gold_reference={"best_answer": f"best-{i}"},
+        )
+        for i in range(5)
+    ]
+
+    async def fake_generate(model, prompt, *, system="", temperature=0.0):
+        for i in range(5):
+            if f"response-{i}" in prompt:
+                return _gen_result(f'{{"score": {i % 2}, "rationale": "item-{i}"}}')
+        raise AssertionError(f"unrecognized prompt: {prompt}")
+
+    provider = AsyncMock()
+    provider.generate_response.side_effect = fake_generate
+    scorer = JudgeScorer(
+        provider=provider, judge_model="judge-model", rubric_template=RUBRIC, concurrency=2
+    )
+
+    results = asyncio.run(scorer.score(items))
+
+    assert [r.response_id for r in results] == [0, 1, 2, 3, 4]
+    assert [r.rationale for r in results] == [f"item-{i}" for i in range(5)]
