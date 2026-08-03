@@ -9,6 +9,7 @@ from app.database.db import (
     insert_response,
     insert_score,
     record_run_quantization,
+    record_run_sample_size,
     update_run_status,
 )
 
@@ -21,5 +22,6 @@ __all__ = [
     "insert_response",
     "insert_score",
     "record_run_quantization",
+    "record_run_sample_size",
     "update_run_status",
 ]

@@ -919,3 +919,26 @@ mocked row. Also verified against the real (already-cached) MMLU dataset directl
 count Step 17 confirmed live against the real Hugging Face dataset months ago in this log — a
 nice independent cross-check that both findings agree. `uv run pytest`: 64/64 passing (63
 previous + 1 new). `uv run ruff check backend`: clean.
+
+## Step 41 — nullable `sample_size` + `record_run_sample_size` + `partial` status
+
+`backend/app/database/schema.py`: `sample_size INTEGER NOT NULL` → `sample_size INTEGER`
+(nullable — NULL means "not resolved yet"). Added the `status` column's documented value list as
+an inline comment (`pending|generating|scoring|complete|partial|failed`), including the new
+`partial` status Step 42 will introduce.
+
+`create_run`'s `sample_size` parameter becomes optional (`int | None = None`), matching the
+schema. New `record_run_sample_size(conn, run_id, sample_size)` in `db.py`, structurally
+identical to `record_run_quantization` — backfills the actual resolved count once
+`load_test_items` runs, same "start unknown, fill in once known" pattern already used for
+quantization. Exported from `database/__init__.py`.
+
+`backend/tests/test_database.py`: two new tests — `create_run` without `sample_size` stores
+`NULL`; `record_run_sample_size` backfills it correctly (and confirms it's `None` beforehand).
+All existing tests (which always pass an explicit `sample_size`) needed no changes — confirms
+this is additive, not a behavior change for existing callers. `uv run pytest`: 66/66 passing (64
+previous + 2 new). `uv run ruff check backend`: clean.
+
+Note: the real local `data/llm_litmus.db` still has the old `NOT NULL` constraint baked in
+(`CREATE TABLE IF NOT EXISTS` doesn't retroactively alter existing tables) — deleting it and
+letting `init_db` regenerate it fresh is part of Step 45's real verification.

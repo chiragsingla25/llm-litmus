@@ -10,6 +10,7 @@ from app.database.db import (
     init_db,
     insert_response,
     insert_score,
+    record_run_sample_size,
     update_run_status,
 )
 
@@ -147,3 +148,30 @@ def test_get_run_returns_none_for_missing_id(tmp_path):
         run = get_run(conn, 999)
 
     assert run is None
+
+
+def test_create_run_without_sample_size_stores_null(tmp_path):
+    db_path = _init_db(tmp_path / "test.db")
+
+    with get_connection(db_path) as conn:
+        run_id = create_run(
+            conn, test_id="t", target_model="m", prompt_template_version="v1"
+        )
+        run = get_run(conn, run_id)
+
+    assert run["sample_size"] is None
+
+
+def test_record_run_sample_size_backfills_actual_count(tmp_path):
+    db_path = _init_db(tmp_path / "test.db")
+
+    with get_connection(db_path) as conn:
+        run_id = create_run(
+            conn, test_id="t", target_model="m", prompt_template_version="v1"
+        )
+        assert get_run(conn, run_id)["sample_size"] is None
+
+        record_run_sample_size(conn, run_id, 378)
+        run = get_run(conn, run_id)
+
+    assert run["sample_size"] == 378

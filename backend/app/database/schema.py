@@ -10,8 +10,8 @@ CREATE TABLE IF NOT EXISTS runs (
   judge_quantization TEXT,
   prompt_template_version TEXT NOT NULL,
   temperature REAL NOT NULL DEFAULT 0.0,
-  sample_size INTEGER NOT NULL,
-  status TEXT NOT NULL DEFAULT 'pending',
+  sample_size INTEGER,                      -- NULL until resolved (e.g. "use full test")
+  status TEXT NOT NULL DEFAULT 'pending',   -- pending|generating|scoring|complete|partial|failed
   error TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))

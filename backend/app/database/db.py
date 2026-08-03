@@ -33,7 +33,7 @@ def create_run(
     test_id: str,
     target_model: str,
     prompt_template_version: str,
-    sample_size: int,
+    sample_size: int | None = None,
     target_quantization: str | None = None,
     judge_model: str | None = None,
     judge_quantization: str | None = None,
@@ -87,6 +87,13 @@ def record_run_quantization(
         "UPDATE runs SET target_quantization = ?, judge_quantization = ? WHERE id = ?",
         (target_quantization, judge_quantization, run_id),
     )
+
+
+def record_run_sample_size(conn: sqlite3.Connection, run_id: int, sample_size: int) -> None:
+    """Backfills the actual number of items processed, once known. `create_run`'s sample_size
+    may be unknown (NULL) at creation time if the caller didn't specify one, meaning "use the
+    full test" -- this records what that actually resolved to."""
+    conn.execute("UPDATE runs SET sample_size = ? WHERE id = ?", (sample_size, run_id))
 
 
 def insert_response(
