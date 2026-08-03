@@ -821,3 +821,44 @@ quantization validation (warn or block on mismatch) — explicitly noting Ollama
 request-time quantization control, so "selecting" quantization in that future feature would mean
 picking a different pre-quantized model tag, not runtime conversion. Docs-only; `uv run pytest`
 still 57/57.
+
+## Step 37 — diagnosed a real 29-minute run failure; `gather_with_concurrency` helper
+
+A notebook cell failed after 29m28s. Diagnosed via Ollama's own `server.log` (`~/.ollama/logs/`)
+and the real `data/llm_litmus.db`, not guesswork: `run_id=12`'s `created_at`→`updated_at` gap
+matched the screenshot's duration exactly. Findings, each a real bug:
+
+1. `runs.sample_size` said `5`, but 78 responses were stored (`item_index` 0-77) — the
+   notebook's `create_run(..., sample_size=5)` and `run_test(..., sample_size=<much larger>)`
+   are two independent literals in the same cell that fell out of sync.
+2. Item #79 hit `LocalOllamaProvider`'s fixed 120s timeout — Ollama's log showed it still
+   actively decoding past 5,391 tokens (deepseek-r1:1.5b is a reasoning model, prone to long
+   chain-of-thought even for simple questions) and it had already triggered a context-window
+   shift. Not a down server, just a slow generation exceeding a too-short fixed ceiling.
+3. That timeout raised `httpx.ReadTimeout` → caught by the `except httpx.TransportError` clause
+   (a `TimeoutException` is a subclass of `TransportError` in httpx) → misreported as
+   `OllamaUnreachableError` ("Is it running? Try `ollama serve`"), actively misleading.
+4. `run_test` wraps generate+score in one try/except — the failure at item 79 discarded the
+   *scoring* of the 78 good responses (0 rows in `scores` for this run) even though, contrary to
+   what I initially told the user, the responses themselves were NOT lost — the outer except
+   handler's own `conn.commit()` (meant to persist `status="failed"`) incidentally flushed the
+   whole pending transaction, including the 78 `insert_response` calls from earlier in the same
+   transaction. Correcting my own earlier claim in this log: partial generation is NOT silently
+   discarded by the current code, it's just never scored or surfaced as a usable partial result.
+5. User separately asked why CPU/GPU sat idle throughout — root cause: `generate_pass` and
+   `JudgeScorer.score()` both use `await` inside a sequential loop/list-comprehension, which is
+   async *syntax* with zero actual concurrency (one HTTP request in flight at a time, ever).
+
+Fixing all of this as a connected set of changes (see `~/.claude/plans/floofy-cooking-lerdorf.md`
+for the full design) — this step is just the first piece: `backend/app/core/concurrency.py`,
+`gather_with_concurrency(limit, coros) -> list` — runs coroutines with at most `limit`
+concurrent, preserving input order in the results regardless of completion order, returning
+exceptions in-place (via `asyncio.gather(..., return_exceptions=True)`) rather than raising, so
+one failure doesn't cancel or hide the others.
+
+`backend/tests/test_concurrency.py`: three tests — result ordering holds even when a
+slower-first/faster-last mix of delays would expose a bug; peak concurrent execution never
+exceeds the configured limit (tracked via a shared counter across 10 tasks bounded to 3); an
+exception from one coroutine is returned in-place, not raised, and doesn't affect the others'
+results. `uv run pytest`: 60/60 passing (57 previous + 3 new). `uv run ruff check backend`:
+clean.
