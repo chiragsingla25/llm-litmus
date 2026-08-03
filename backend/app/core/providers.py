@@ -22,6 +22,18 @@ class OllamaUnreachableError(OllamaProviderError):
         self.base_url = base_url
 
 
+class OllamaTimeoutError(OllamaProviderError):
+    def __init__(self, model: str, timeout: float) -> None:
+        msg = (
+            f"Ollama did not respond for model '{model}' within {timeout:.0f}s. It may still "
+            "be generating a long response (reasoning models can take a while) rather than "
+            "being down -- consider raising ollama_request_timeout_seconds in config.json."
+        )
+        super().__init__(msg)
+        self.model = model
+        self.timeout = timeout
+
+
 class OllamaModelNotFoundError(OllamaProviderError):
     def __init__(self, model: str, detail: str = "") -> None:
         msg = f"Model '{model}' is not available in Ollama. Try `ollama pull {model}`."
@@ -81,7 +93,11 @@ class BaseLLMProvider(ABC):
 
 
 class LocalOllamaProvider(BaseLLMProvider):
-    def __init__(self, base_url: str = settings.OLLAMA_BASE_URL, timeout: float = 120.0) -> None:
+    def __init__(
+        self,
+        base_url: str = settings.OLLAMA_BASE_URL,
+        timeout: float = settings.OLLAMA_REQUEST_TIMEOUT_SECONDS,
+    ) -> None:
         self._base_url = base_url.rstrip("/")
         self._timeout = timeout
 
@@ -103,6 +119,8 @@ class LocalOllamaProvider(BaseLLMProvider):
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             try:
                 response = await client.post(f"{self._base_url}/api/generate", json=payload)
+            except httpx.TimeoutException as exc:
+                raise OllamaTimeoutError(model, self._timeout) from exc
             except httpx.TransportError as exc:
                 raise OllamaUnreachableError(self._base_url) from exc
 
@@ -143,6 +161,8 @@ class LocalOllamaProvider(BaseLLMProvider):
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             try:
                 response = await client.post(f"{self._base_url}/api/show", json={"model": model})
+            except httpx.TimeoutException as exc:
+                raise OllamaTimeoutError(model, self._timeout) from exc
             except httpx.TransportError as exc:
                 raise OllamaUnreachableError(self._base_url) from exc
 

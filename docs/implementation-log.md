@@ -882,3 +882,27 @@ app's job is just to offer concurrent requests, not to tune server-side parallel
 defaults-from-config.json test and the env-override test, following the exact established
 pattern rather than writing a separate test function per field. `uv run pytest`: still 60/60 (no
 new test count — same three test functions, more assertions). `uv run ruff check backend`: clean.
+
+## Step 39 — fix the timeout misclassification; use the configurable timeout
+
+`backend/app/core/providers.py`: new `OllamaTimeoutError(OllamaProviderError)` — states the
+model and the timeout value, and explicitly says it may just be a slow/long generation rather
+than Ollama being down (the opposite framing of `OllamaUnreachableError`'s "Is it running?").
+
+The actual bug: `except httpx.TransportError` was catching *everything*, including timeouts —
+`httpx.TimeoutException` (which covers `ReadTimeout`, `ConnectTimeout`, etc.) is a subclass of
+`TransportError` in httpx, so the broader clause silently absorbed the more specific case. Fixed
+in both `generate_response` and `get_model_info` by adding `except httpx.TimeoutException`
+*before* the existing `except httpx.TransportError` — order matters here since Python checks
+except clauses top to bottom; a genuine `ConnectError` still falls through to the unchanged,
+correctly-named `OllamaUnreachableError`.
+
+`LocalOllamaProvider.__init__`'s `timeout` default changed from the hardcoded `120.0` to
+`settings.OLLAMA_REQUEST_TIMEOUT_SECONDS` (Step 38's new `300`). Verified directly:
+`LocalOllamaProvider()._timeout == 300.0`.
+
+`backend/tests/test_providers.py`: two new timeout tests (`generate_response` and
+`get_model_info`, mocking `httpx.ReadTimeout`) asserting `OllamaTimeoutError` specifically — and
+one explicit regression test mocking `httpx.ConnectError` to confirm that case still raises
+`OllamaUnreachableError`, not swallowed by the new timeout handling. `uv run pytest`: 63/63
+passing (60 previous + 3 new). `uv run ruff check backend`: clean.
