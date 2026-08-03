@@ -21,7 +21,7 @@ router = APIRouter()
 class RunTestRequest(BaseModel):
     test_id: str
     target_model: str
-    sample_size: int
+    sample_size: int | None = None
     judge_model: str | None = None
 
 

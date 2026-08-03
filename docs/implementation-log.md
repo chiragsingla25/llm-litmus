@@ -1020,3 +1020,14 @@ sequential run would be expected to take at this model's observed per-item laten
 per Step 37's diagnosis) — consistent with real concurrent execution happening, not just
 requests queuing one-at-a-time at Ollama, though a precise apples-to-apples sequential-vs-
 concurrent timing comparison on identical items wasn't run.
+
+## Step 45 — optional `sample_size` in the router
+
+`RunTestRequest.sample_size: int` → `int | None = None` in `backend/app/router/runs.py` — the
+rest of the endpoint already passed `request.sample_size` straight through to `create_run`/
+`run_test`, both already accepting `None` as of Steps 41/44, so no other code changes needed.
+
+`backend/tests/test_runs_router.py`: one new test posting a request that omits `sample_size`
+entirely, confirming it's genuinely optional at the API layer (not just defaulted at the Python
+call-site level) — asserts `200` and a real `run_id` back. `uv run pytest`: 70/70 passing (69
+previous + 1 new). `uv run ruff check backend`: clean.
