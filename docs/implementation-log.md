@@ -734,3 +734,40 @@ kernel (`nbclient`, this step), the cause is most likely environment-specific to
 wrong/no kernel selected in VS Code, or a model referenced in the notebook (`JUDGE_MODEL =
 "deepseek-r1:1.5b"`, hardcoded in the Setup cell) not being pulled there. Asked the user for the
 exact error message and which cell fails.
+
+(Resolved conversationally, no code change needed: the error was `AttributeError: 'Settings'
+object has no attribute 'DB_PATH'` — a stale kernel that had imported `app.core.config` before
+`DB_PATH` was added in Phase 2. Fix was restarting the notebook's kernel.)
+
+## Step 33 — dataset inspection: `items_to_dataframe()` (in-memory, not persisted)
+
+User asked for sampled dataset items to be inspectable without an ad-hoc script. First design
+(CSV via stdlib `csv.DictWriter`, persisted to `data/dataset_samples/`) was explicitly rejected —
+user wanted a pandas DataFrame instead, in-memory during a run/session, not written to disk.
+
+Added `pandas` to `[project] dependencies` in root `pyproject.toml` (not `dev` — this is real
+backend code, not test-only). Confirmed low actual cost before adding: `pandas` was already
+resolved and installed as a transitive dependency of `datasets` since the very first `uv sync`
+during the uv migration (`pandas==3.0.5` in that log's output) — `uv lock && uv sync` after this
+change downloaded nothing new, just rebuilt the local `llm-litmus` package.
+
+`backend/app/registry/dataset_loader.py`: new `items_to_dataframe(test, items) -> pd.DataFrame`,
+kept fully separate from `load_test_items()` rather than changing that function's return type or
+inlining the DataFrame construction into it — `load_test_items` is depended on as-is by
+`generate_pass`/`run_test` (Step 28) and covered by already-passing tests; no reason to risk that
+for a convenience feature. Callers compose the two:
+`items_to_dataframe(test, load_test_items(test, n))`. Columns: the `Test`'s identifying
+attributes (`test_id`, `dataset_source`, `dataset_config`, `dataset_split`, `prompt_template`)
+followed by each item's raw fields.
+
+`backend/tests/test_dataset_loader.py`: two new tests — column/value correctness against a
+hand-built MMLU-shaped item list (pure function, no mocking needed), and the empty-items edge
+case. Also verified against the real, already-cached MMLU dataset directly (not mocked):
+`items_to_dataframe(TESTS["mmlu_elementary_math"], load_test_items(..., 5))` → shape `(5, 9)`,
+columns include `subject` (a real MMLU field this session's hand-built test fixtures never
+happened to include, confirming the function handles the actual schema, not just the test's
+simplified one). `uv run pytest`: 57/57 passing (55 previous + 2 new). `uv run ruff check
+backend`: clean (also caught and fixed one line-length-only issue ruff's default rule set didn't
+flag — `E501` isn't in ruff's default selected rules despite `line-length = 100` being
+configured, so `line-length` only governs `ruff format`/rules that reference it, not automatic
+line-length linting; fixed manually for consistency with the rest of the codebase anyway).

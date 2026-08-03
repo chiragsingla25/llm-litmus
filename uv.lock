@@ -842,6 +842,7 @@ dependencies = [
     { name = "datasets" },
     { name = "fastapi" },
     { name = "httpx" },
+    { name = "pandas" },
     { name = "uvicorn" },
 ]
 
@@ -857,6 +858,7 @@ requires-dist = [
     { name = "datasets", specifier = ">=5.0.0" },
     { name = "fastapi", specifier = ">=0.139.2" },
     { name = "httpx", specifier = ">=0.28.1" },
+    { name = "pandas", specifier = ">=3.0.5" },
     { name = "uvicorn", specifier = ">=0.51.0" },
 ]
 

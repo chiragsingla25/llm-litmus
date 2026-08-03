@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 from app.registry import TESTS
-from app.registry.dataset_loader import load_test_items
+from app.registry.dataset_loader import items_to_dataframe, load_test_items
 
 
 def _fake_dataset(rows: list[dict]) -> MagicMock:
@@ -44,3 +44,39 @@ def test_load_test_items_uses_truthfulqa_registry_fields():
         "truthfulqa/truthful_qa", "generation", split="validation"
     )
     assert items == rows
+
+
+def test_items_to_dataframe_includes_test_attributes_and_item_fields():
+    test = TESTS["mmlu_elementary_math"]
+    items = [
+        {
+            "question": "What is the value of p in 24 = 2p?",
+            "choices": ["4", "8", "12", "24"],
+            "answer": 2,
+        },
+        {"question": "What is 1 + 1?", "choices": ["1", "2", "3", "4"], "answer": 1},
+    ]
+
+    df = items_to_dataframe(test, items)
+
+    assert len(df) == 2
+    assert list(df.columns) == [
+        "test_id",
+        "dataset_source",
+        "dataset_config",
+        "dataset_split",
+        "prompt_template",
+        "question",
+        "choices",
+        "answer",
+    ]
+    assert (df["test_id"] == "mmlu_elementary_math").all()
+    assert (df["dataset_source"] == "cais/mmlu").all()
+    assert df.iloc[0]["question"] == "What is the value of p in 24 = 2p?"
+    assert df.iloc[0]["answer"] == 2
+    assert df.iloc[1]["question"] == "What is 1 + 1?"
+
+
+def test_items_to_dataframe_empty_items():
+    df = items_to_dataframe(TESTS["mmlu_elementary_math"], [])
+    assert len(df) == 0
