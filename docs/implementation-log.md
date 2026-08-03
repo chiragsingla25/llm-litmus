@@ -1031,3 +1031,21 @@ rest of the endpoint already passed `request.sample_size` straight through to `c
 entirely, confirming it's genuinely optional at the API layer (not just defaulted at the Python
 call-site level) — asserts `200` and a real `run_id` back. `uv run pytest`: 70/70 passing (69
 previous + 1 new). `uv run ruff check backend`: clean.
+
+## Step 46 — notebook: one shared `SAMPLE_SIZE` instead of two literals
+
+The direct fix for what actually caused the incident: the notebook's Setup cell gains
+`SAMPLE_SIZE = 5  # None = use the full test`, with a comment explicitly naming the bug it
+prevents. Both pipeline sections (MMLU, TruthfulQA) now reference `SAMPLE_SIZE` in both their
+`create_run(...)` and `run_test(...)` calls instead of two independent `5`s that could drift
+apart — the literal scenario that produced `sample_size=5` recorded against a run that actually
+processed 78 items. Also added `sample_size` to both sections' printed output, so the recorded
+value is visible without a separate DB query.
+
+Executed the full notebook end-to-end via `nbclient` against real Ollama (`deepseek-r1:1.5b`
+target, `llama3.2:latest` judge) — took several minutes given the target model's slow, verbose
+reasoning output, ran as a background task while waiting. Both sections completed
+`status="complete"` with `sample_size: 5` correctly shown (no drift now — impossible by
+construction, not just backfilled-and-correct as Step 44 alone would already have guaranteed),
+quantization captured for both models. `uv run pytest`: still 70/70 (no backend code touched).
+`uv run ruff check backend`: clean.
