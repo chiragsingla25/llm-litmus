@@ -771,3 +771,18 @@ backend`: clean (also caught and fixed one line-length-only issue ruff's default
 flag — `E501` isn't in ruff's default selected rules despite `line-length = 100` being
 configured, so `line-length` only governs `ruff format`/rules that reference it, not automatic
 line-length linting; fixed manually for consistency with the rest of the codebase anyway).
+
+## Step 34 — notebook demo for `items_to_dataframe`
+
+New "## 7. Inspect sampled items as a DataFrame" section in `provider_walkthrough.ipynb`, inserted
+between the Registry listing and the MMLU pipeline run (renumbering those two from 7/8 to 8/9,
+and updating the notebook's own intro paragraph to match). Loads 5 MMLU items and displays
+`items_to_dataframe(...)` directly as a cell's return value — DataFrames render richly in
+Jupyter by default, which is the actual "analyze better" benefit over the plain `print()`
+statements used elsewhere in this notebook.
+
+Executed the full notebook end-to-end via `nbclient` (the established technique) and saved real
+outputs — confirmed the new DataFrame cell renders with real columns
+(`test_id`/`dataset_source`/`dataset_config`/`dataset_split`/`prompt_template` plus MMLU's own
+`question`/`subject`/`choices`/`answer`) and real sampled rows, not placeholder data. `uv run
+pytest`: still 57/57 (no backend code touched by this step).
