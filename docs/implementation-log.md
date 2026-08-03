@@ -1049,3 +1049,29 @@ reasoning output, ran as a background task while waiting. Both sections complete
 construction, not just backfilled-and-correct as Step 44 alone would already have guaranteed),
 quantization captured for both models. `uv run pytest`: still 70/70 (no backend code touched).
 `uv run ruff check backend`: clean.
+
+## Step 47 — closing verification (schema + real timeout, end to end)
+
+Two targeted real checks the earlier steps hadn't directly covered:
+
+**Schema**: deleted the local `data/llm_litmus.db` (still had the old `NOT NULL` constraint
+baked in from before Step 41) and let `init_db` regenerate it. `PRAGMA table_info(runs)`
+confirms `sample_size`'s notnull flag is now `0`; `create_run(..., sample_size=None)` against
+this real file stores `NULL` without error — the nullable-schema fix genuinely applies, not just
+in `tmp_path`-based tests.
+
+**Real timeout**: rather than waiting out a real 29-minute reasoning ramble again, temporarily
+set `OLLAMA_REQUEST_TIMEOUT_SECONDS=5` via env var (the override mechanism from Step 20) and
+asked `deepseek-r1:1.5b` for a long essay. Got back exactly `OllamaTimeoutError` — "Ollama did
+not respond for model 'deepseek-r1:1.5b' within 5s. It may still be generating a long response
+(reasoning models can take a while) rather than being down..." — confirming the core fix
+end-to-end against real Ollama, not just mocked `httpx.ReadTimeout`.
+
+Both `data/` artifacts deleted afterward (gitignored, disposable). Final state: `uv run pytest`
+70/70 passing, `uv run ruff check backend` clean, `git status` clean.
+
+**This closes out the full fix** for the diagnosed 29-minute failure: `sample_size` is optional
+everywhere (defaults to the full test) and can no longer silently drift between two literals;
+`generate_pass`/`JudgeScorer.score()` run concurrently instead of serially; a partial failure
+now scores whatever succeeded instead of discarding it; and a slow generation is now reported as
+exactly that, not a misleading "is Ollama running?".
