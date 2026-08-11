@@ -38,7 +38,7 @@ def test_trigger_run_success_returns_run_id(client):
     response = client.post(
         "/tests/run",
         json={
-            "test_id": "mmlu_elementary_math",
+            "test_id": "lmeval_gsm8k",
             "target_model": "fake-target",
             "sample_size": 2,
         },
@@ -53,7 +53,7 @@ def test_trigger_run_without_sample_size_is_accepted(client):
     # Omitting sample_size means "use the full test" -- must not be a required field.
     response = client.post(
         "/tests/run",
-        json={"test_id": "mmlu_elementary_math", "target_model": "fake-target"},
+        json={"test_id": "lmeval_gsm8k", "target_model": "fake-target"},
     )
     assert response.status_code == 200
     assert isinstance(response.json()["run_id"], int)
@@ -63,7 +63,7 @@ def test_get_run_returns_stored_row(client):
     create_response = client.post(
         "/tests/run",
         json={
-            "test_id": "mmlu_elementary_math",
+            "test_id": "lmeval_gsm8k",
             "target_model": "fake-target",
             "sample_size": 2,
         },
@@ -75,7 +75,7 @@ def test_get_run_returns_stored_row(client):
     assert response.status_code == 200
     body = response.json()
     assert body["id"] == run_id
-    assert body["test_id"] == "mmlu_elementary_math"
+    assert body["test_id"] == "lmeval_gsm8k"
     assert body["target_model"] == "fake-target"
 
 

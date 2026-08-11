@@ -7,15 +7,45 @@ from app.database import create_run, get_connection, get_responses_for_run, get_
 from app.evaluations.run_loop import run_test
 
 MMLU_ROWS = [
-    {"question": "Q1", "choices": ["1", "2", "3", "4"], "answer": 0},  # gold: A
-    {"question": "Q2", "choices": ["1", "2", "3", "4"], "answer": 1},  # gold: B
+    {
+        "question": "Q1",
+        "choices": ["1", "2", "3", "4"],
+        "answer": 0,  # gold: A
+        "lmeval_prompt": "Q1\nA. 1\nB. 2\nC. 3\nD. 4\nAnswer:",
+    },
+    {
+        "question": "Q2",
+        "choices": ["1", "2", "3", "4"],
+        "answer": 1,  # gold: B
+        "lmeval_prompt": "Q2\nA. 1\nB. 2\nC. 3\nD. 4\nAnswer:",
+    },
 ]
 
 PARTIAL_ROWS = [
-    {"question": "P0", "choices": ["1", "2", "3", "4"], "answer": 0},  # gold: A -- succeeds
-    {"question": "P1", "choices": ["1", "2", "3", "4"], "answer": 1},  # gold: B -- fails
-    {"question": "P2", "choices": ["1", "2", "3", "4"], "answer": 2},  # gold: C -- succeeds
-    {"question": "P3", "choices": ["1", "2", "3", "4"], "answer": 3},  # gold: D -- fails
+    {
+        "question": "P0",
+        "choices": ["1", "2", "3", "4"],
+        "answer": 0,
+        "lmeval_prompt": "P0\nAnswer:",
+    },
+    {
+        "question": "P1",
+        "choices": ["1", "2", "3", "4"],
+        "answer": 1,
+        "lmeval_prompt": "P1\nAnswer:",
+    },
+    {
+        "question": "P2",
+        "choices": ["1", "2", "3", "4"],
+        "answer": 2,
+        "lmeval_prompt": "P2\nAnswer:",
+    },
+    {
+        "question": "P3",
+        "choices": ["1", "2", "3", "4"],
+        "answer": 3,
+        "lmeval_prompt": "P3\nAnswer:",
+    },
 ]
 
 TRUTHFULQA_ROWS = [
@@ -101,9 +131,9 @@ def test_run_test_mmlu_end_to_end_with_pass_and_fail(tmp_path):
     with get_connection(db_path) as conn:
         run_id = create_run(
             conn,
-            test_id="mmlu_elementary_math",
+            test_id="lmeval_mmlu_elementary_mathematics",
             target_model="fake-target",
-            prompt_template_version="mmlu_multiple_choice_v1",
+            prompt_template_version="lmeval_mmlu_elementary_mathematics_v1",
         )
 
     provider = FakeProvider(
@@ -114,7 +144,7 @@ def test_run_test_mmlu_end_to_end_with_pass_and_fail(tmp_path):
     with patch("app.evaluations.run_loop.load_test_items", return_value=MMLU_ROWS):
         asyncio.run(
             run_test(
-                "mmlu_elementary_math",
+                "lmeval_mmlu_elementary_mathematics",
                 target_model="fake-target",
                 sample_size=2,
                 provider=provider,
@@ -200,7 +230,13 @@ def test_run_test_sample_size_none_uses_full_dataset_and_backfills_count(tmp_pat
     _init_db(db_path)
 
     rows = [
-        {"question": f"R{i}", "choices": ["1", "2", "3", "4"], "answer": 0} for i in range(6)
+        {
+            "question": f"R{i}",
+            "choices": ["1", "2", "3", "4"],
+            "answer": 0,
+            "lmeval_prompt": f"R{i}\nAnswer:",
+        }
+        for i in range(6)
     ]
     provider = FakeProvider(
         target_model="fake-target",
@@ -210,15 +246,15 @@ def test_run_test_sample_size_none_uses_full_dataset_and_backfills_count(tmp_pat
     with get_connection(db_path) as conn:
         run_id = create_run(
             conn,
-            test_id="mmlu_elementary_math",
+            test_id="lmeval_mmlu_elementary_mathematics",
             target_model="fake-target",
-            prompt_template_version="mmlu_multiple_choice_v1",
+            prompt_template_version="lmeval_mmlu_elementary_mathematics_v1",
         )
 
     with patch("app.evaluations.run_loop.load_test_items", return_value=rows) as mock_load:
         asyncio.run(
             run_test(
-                "mmlu_elementary_math",
+                "lmeval_mmlu_elementary_mathematics",
                 target_model="fake-target",
                 sample_size=None,
                 provider=provider,
@@ -246,9 +282,9 @@ def test_run_test_partial_failure_scores_the_successes(tmp_path):
     with get_connection(db_path) as conn:
         run_id = create_run(
             conn,
-            test_id="mmlu_elementary_math",
+            test_id="lmeval_mmlu_elementary_mathematics",
             target_model="fake-target",
-            prompt_template_version="mmlu_multiple_choice_v1",
+            prompt_template_version="lmeval_mmlu_elementary_mathematics_v1",
         )
 
     provider = FakeProvider(
@@ -260,7 +296,7 @@ def test_run_test_partial_failure_scores_the_successes(tmp_path):
     with patch("app.evaluations.run_loop.load_test_items", return_value=PARTIAL_ROWS):
         asyncio.run(
             run_test(
-                "mmlu_elementary_math",
+                "lmeval_mmlu_elementary_mathematics",
                 target_model="fake-target",
                 sample_size=4,
                 provider=provider,
@@ -290,9 +326,9 @@ def test_run_test_total_failure_still_marks_failed(tmp_path):
     with get_connection(db_path) as conn:
         run_id = create_run(
             conn,
-            test_id="mmlu_elementary_math",
+            test_id="lmeval_mmlu_elementary_mathematics",
             target_model="fake-target",
-            prompt_template_version="mmlu_multiple_choice_v1",
+            prompt_template_version="lmeval_mmlu_elementary_mathematics_v1",
         )
 
     provider = FakeProvider(
@@ -304,7 +340,7 @@ def test_run_test_total_failure_still_marks_failed(tmp_path):
     with patch("app.evaluations.run_loop.load_test_items", return_value=MMLU_ROWS):
         asyncio.run(
             run_test(
-                "mmlu_elementary_math",
+                "lmeval_mmlu_elementary_mathematics",
                 target_model="fake-target",
                 sample_size=2,
                 provider=provider,

@@ -3,7 +3,7 @@ from app.core.config import settings
 from app.core.providers import LocalOllamaProvider
 from app.evaluations.scorer_factory import build_scorer
 from app.registry import TESTS
-from app.scorers.deterministic import MultipleChoiceMatchScorer
+from app.scorers.integrations.lmeval_scorer import LmEvalMmluMatchScorer
 from app.scorers.judge import JudgeScorer
 from app.scorers.judge.truthfulqa import TRUTHFULQA_RUBRIC_V1
 
@@ -30,9 +30,16 @@ WATERMELON_ROW = {
 }
 
 
-def test_build_scorer_returns_deterministic_for_mmlu():
-    scorer = build_scorer(TESTS["mmlu_elementary_math"])
-    assert isinstance(scorer, MultipleChoiceMatchScorer)
+def test_build_scorer_returns_deterministic_for_lmeval_mmlu():
+    scorer = build_scorer(TESTS["lmeval_mmlu_elementary_mathematics"])
+    assert isinstance(scorer, LmEvalMmluMatchScorer)
+
+
+def test_build_scorer_returns_deterministic_for_lmeval_gsm8k():
+    from app.scorers.integrations.lmeval_scorer import LmEvalGsm8kExactMatchScorer
+
+    scorer = build_scorer(TESTS["lmeval_gsm8k"])
+    assert isinstance(scorer, LmEvalGsm8kExactMatchScorer)
 
 
 def test_build_scorer_returns_judge_for_truthfulqa():

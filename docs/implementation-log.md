@@ -1075,3 +1075,15 @@ everywhere (defaults to the full test) and can no longer silently drift between 
 `generate_pass`/`JudgeScorer.score()` run concurrently instead of serially; a partial failure
 now scores whatever succeeded instead of discarding it; and a slow generation is now reported as
 exactly that, not a misleading "is Ollama running?".
+
+## Step 48 — lm-eval adapters (DeepEval deferred)
+
+Replaced native HF MMLU (`mmlu_elementary_math` + hand-rolled prompt template) with lm-eval-backed
+deterministic tests: `lmeval_gsm8k` and `lmeval_mmlu_elementary_mathematics`. Added required
+`lm-eval` dependency; `dataset_source="lm_eval"` routes through `lmeval_loader` (TaskManager →
+`test_docs` / `doc_to_text` / `doc_to_target`). Phase A still generates via Ollama; Phase B uses
+`LmEvalGsm8kExactMatchScorer` / `LmEvalMmluMatchScorer` — never `lm_eval.simple_evaluate()`.
+
+Kept native `truthfulqa_generation` (grounded judge). DeepEval explicitly deferred. Updated
+registry, scorer_factory, tests, README, CLAUDE.md, PROJECT_DOCUMENTATION.md, and the provider
+walkthrough notebook. `uv run pytest`: 85 passed.

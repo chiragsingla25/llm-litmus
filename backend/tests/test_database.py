@@ -70,10 +70,10 @@ def test_run_response_score_round_trip(tmp_path):
     with get_connection(db_path) as conn:
         run_id = create_run(
             conn,
-            test_id="mmlu_elementary_math",
+            test_id="lmeval_gsm8k",
             target_model="llama3.2:latest",
             target_quantization="Q4_K_M",
-            prompt_template_version="mmlu_multiple_choice_v1",
+            prompt_template_version="lmeval_gsm8k_v1",
             sample_size=2,
         )
 

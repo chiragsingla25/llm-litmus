@@ -3,19 +3,14 @@
 Template names are versioned tags (e.g. "_v1") recorded with every run per CLAUDE.md's
 reproducibility requirement -- changing the wording of an existing template means adding a
 new version, not editing this one in place.
+
+lm-eval-backed tests record the task's doc_to_text formatting under these version tags;
+the actual prompt string is produced by lm-eval at load time (see lmeval_loader).
 """
 
-MMLU_MULTIPLE_CHOICE_V1 = "mmlu_multiple_choice_v1"
-
-
-def render_mmlu_multiple_choice_v1(question: str, choices: list[str]) -> str:
-    lettered = "\n".join(f"{letter}. {choice}" for letter, choice in zip("ABCD", choices))
-    return (
-        "Answer the following multiple-choice question. "
-        "Respond with only the letter of the correct answer.\n\n"
-        f"{question}\n\n{lettered}\n\nAnswer:"
-    )
-
+# lm-eval task formatting version tags (prompt body comes from task.doc_to_text).
+LMEVAL_GSM8K_V1 = "lmeval_gsm8k_v1"
+LMEVAL_MMLU_ELEMENTARY_MATHEMATICS_V1 = "lmeval_mmlu_elementary_mathematics_v1"
 
 TRUTHFULQA_GENERATION_V1 = "truthfulqa_generation_v1"
 

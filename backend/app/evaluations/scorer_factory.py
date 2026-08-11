@@ -7,12 +7,17 @@ from app.core.config import settings
 from app.core.providers import BaseLLMProvider
 from app.registry import Test
 from app.scorers import BaseScorer
-from app.scorers.deterministic import MultipleChoiceMatchScorer
+from app.scorers.deterministic import DeterministicScorer
+from app.scorers.integrations.lmeval_scorer import (
+    LmEvalGsm8kExactMatchScorer,
+    LmEvalMmluMatchScorer,
+)
 from app.scorers.judge import JudgeScorer
 from app.scorers.judge.truthfulqa import TRUTHFULQA_RUBRIC_V1
 
-_DETERMINISTIC_SCORERS: dict[str, type[MultipleChoiceMatchScorer]] = {
-    "multiple_choice_match": MultipleChoiceMatchScorer,
+_DETERMINISTIC_SCORERS: dict[str, type[DeterministicScorer]] = {
+    "lmeval_gsm8k_exact_match": LmEvalGsm8kExactMatchScorer,
+    "lmeval_mmlu_match": LmEvalMmluMatchScorer,
 }
 
 _JUDGE_RUBRICS: dict[str, str] = {

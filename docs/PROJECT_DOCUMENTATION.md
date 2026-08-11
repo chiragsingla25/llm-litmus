@@ -21,11 +21,11 @@ Phase 1 ships 2–3 tests covering both scoring types, built on a Test Registry 
 
 The industry-standard tool for this job is **EleutherAI's lm-evaluation-harness** — it powers the Hugging Face Open LLM Leaderboard and runs hundreds of benchmarks against local models. This project is not trying to replace it. It deliberately borrows its good ideas and packages them differently:
 
-**Borrowed from lm-eval-harness:** standardized prompt templates per benchmark, separating generation from scoring, recording model/config metadata with every run.
+**Borrowed from lm-eval-harness:** standardized prompt templates per benchmark, separating generation from scoring, recording model/config metadata with every run. Deterministic benchmarks (GSM8K, MMLU subject) load **questions and scoring conventions** from lm-eval task definitions; the app still owns the two-pass Ollama generate → store → score loop (never `lm_eval.simple_evaluate()` end-to-end).
 
 **What this project does differently:** a plug-and-play GUI instead of CLI + config files; hardware-aware time budgeting (profile the machine, fit the test run to a user-chosen time budget); judge-LLM scoring using a second local model; and a deliberately tiny, readable codebase — the point is demonstrating architecture and product thinking, not benchmark coverage.
 
-Other adjacent tools and their gaps: DeepEval/RAGAs (SDKs, no GUI, judge is typically a cloud API), Promptfoo (CLI matrix testing, static config), Langfuse/Phoenix (observability for deployed apps, not local model testing).
+**DeepEval is deferred** (SDK-oriented quality metrics; does not supply benchmark question banks). Other adjacent tools: RAGAs, Promptfoo, Langfuse/Phoenix — not in scope for v1.
 
 ### 1.3 Core value pillars
 
@@ -111,7 +111,7 @@ This one decision solves three problems at once:
 | Model interface | `BaseLLMProvider` abstraction; `LocalOllamaProvider` is the only Phase 1 implementation | Same interface a cloud provider would implement in a later phase; `get_model_info` reports each model's already-baked-in quantization for reproducibility metadata only — the app never selects or applies a quantization level |
 | Deterministic scoring | Plain Python | One small function per scorer type (e.g. multiple-choice match) |
 | Judge scoring | Structured-output prompting against a user-selected local model | Grounded rubric score + short rationale, JSON-validated with retry-on-parse-failure |
-| Dataset sourcing | Hugging Face `datasets` with default local caching (small configs/splits — no streaming complexity needed) | Fetched once anonymously, cached; no token, datasets are public and ungated |
+| Dataset sourcing | lm-eval tasks for deterministic benchmarks; Hugging Face `datasets` for TruthfulQA (cached, no streaming) | Fetched once anonymously, cached; no token, datasets are public and ungated |
 | Storage | SQLite via stdlib `sqlite3` (no ORM) | Runs, raw responses, scores |
 | Packaging | Single `run.sh` (Python venv + backend, `npm install` + dev server for frontend) | Clone → run → app opens. macOS/Linux; Windows via WSL (one README line) |
 
@@ -121,12 +121,12 @@ A test is a declaration:
 
 ```
 Test = {
-  id: "mmlu_elementary_math",
-  dataset: { source: "cais/mmlu", config: "elementary_mathematics", split: "test" },
-  prompt_template: "mmlu_multiple_choice",     # standardized per benchmark, borrowed practice from lm-eval-harness
+  id: "lmeval_gsm8k",
+  dataset: { source: "lm_eval", config: "gsm8k", split: "test" },  # config = lm-eval task name
+  prompt_template: "lmeval_gsm8k_v1",          # version tag; prompt body from task.doc_to_text
   sample_size: "allocator-decided",
   scoring_type: "deterministic",               # or "judge"
-  scorer: "multiple_choice_match",             # registered function, or rubric template for judge tests
+  scorer: "lmeval_gsm8k_exact_match",          # or native judge rubric name
 }
 ```
 
@@ -142,17 +142,17 @@ Everything else — registry, dataset fetch, generation pass, storage, run orche
 
 ### 2.5 Phase 1 test set
 
-| Test | Dataset | Scoring | Notes |
+| Test | Questions from | Scoring | Notes |
 |---|---|---|---|
-| MMLU (one subject subset) | `cais/mmlu` (verify ID at build time) | Deterministic | Multiple-choice match — simplest possible proof of the deterministic path |
-| TruthfulQA (generation split) | `truthful_qa` | Judge-LLM | The dataset ships `correct_answers` / `incorrect_answers` per question — the judge prompt includes these as reference material, so the judge checks against provided ground truth rather than its own knowledge. Much more reliable than a free-floating "rate this" prompt, and mirrors how the original benchmark's judge worked |
-| GSM8K *(stretch only)* | `gsm8k` | Deterministic | Regex-extract final number. Only if time allows; also serves as the proof that adding a registry test is cheap |
+| `lmeval_gsm8k` | lm-eval task `gsm8k` | Deterministic (`####` exact match) | lm-eval supplies questions + scoring convention; generative Phase A via Ollama |
+| `lmeval_mmlu_elementary_mathematics` | lm-eval task `mmlu_elementary_mathematics` | Deterministic (A–D letter match) | Same; directional local scores, not leaderboard-comparable loglikelihood MMLU |
+| `truthfulqa_generation` | HF `truthfulqa/truthful_qa` | Native Judge-LLM | Grounded in `correct_answers` / `incorrect_answers` — kept as the local truthfulness metric; not replaced by DeepEval |
 
 ### 2.6 Measurement honesty (built into the product, not just the README)
 
 - **Reproducible decoding:** temperature 0 / greedy for all benchmark runs. Model tag, quantization level, and prompt template version recorded with every run — two runs of the same setup produce the same numbers.
 - **Sample-size caveats:** with e.g. 20 questions, the margin of error is large (±10–20pp). The UI displays sample size next to every score and the README states plainly that results are directional, for comparing *your local models against each other* — not comparable to published leaderboard numbers (which use full test sets, specific few-shot formats, and unquantized weights).
-- **Prompt-format awareness:** published MMLU numbers use 5-shot prompting; small local models need careful answer-extraction handling. The prompt template per test is explicit and versioned rather than implicit.
+- **Prompt-format awareness:** published MMLU numbers often use few-shot loglikelihood scoring; this app uses generative Phase A + letter extraction from lm-eval task prompts. Results are directional local comparisons, not leaderboard-comparable. Prompt-template version tags are recorded per run.
 - **Judge scores are labeled as model opinion.** Known judge biases (longer/more confident answers, self-preference) are stated in the README.
 
 ### 2.7 Hardware-aware time budgeting
@@ -251,7 +251,7 @@ Each of these validates the registry design — none should require touching the
 | GSM8K (if not done as v1 stretch) | `gsm8k` | New deterministic scorer: regex numeric extraction |
 | SQuAD | `squad` | New deterministic scorer: F1 / exact-match on answer spans |
 | HumanEval | `openai_humaneval` | New deterministic scorer: sandboxed code execution (subprocess + timeout, no network) — the most involved scorer, saved for last |
-| 2–3 more MMLU subjects | `cais/mmlu` configs | Zero new code — pure registry entries, the cheapest possible additions |
+| More lm-eval tasks | lm-eval task names | Mostly registry + loader routing; reuse deterministic scorers where the gold shape matches |
 | 1–2 more judge-scored tests | TBD | Reuses `JudgeScorer` with different rubric templates |
 
 **Definition of done for this workstream:** at least one contributor-style test addition documented in the README ("how to add a test in ~20 lines"), proving the extension story to anyone reading the repo.
@@ -280,7 +280,7 @@ Why it's cheap by then: it reuses `JudgeScorer`, the provider interface, storage
 - **Judge tests cost ~2x per item** — handled by batched two-pass execution and reflected in the time-budget math.
 - **First run needs internet** for the one-time dataset fetch; cached thereafter. All inference is always local.
 - **Two runtimes** (Python + Node) plus Ollama; `run.sh` hides it. Windows requires WSL.
-- **Verify HF dataset IDs at build time** — some (e.g. MMLU → `cais/mmlu`) have moved over the years.
+- **Verify lm-eval task names / HF dataset IDs at build time** — task renames and Hub moves happen; pin against a known lm-eval version.
 
 ---
 
@@ -288,4 +288,4 @@ Why it's cheap by then: it reuses `JudgeScorer`, the provider interface, storage
 
 - **Judge rubric scale for TruthfulQA** — e.g. binary truthful/untruthful vs. 1–5 scale, given the judge sees the reference answer lists. Binary is simpler and easier to aggregate; worth a quick look at how existing judge implementations phrase it.
 - **Default judge model** — a sensible UI pre-selection rule (e.g. suggest a model ≥ the target's size) so users don't judge a 8B model with a 1B model.
-- **Which MMLU subject(s)** for the deterministic test — pick deliberately (one subject keeps the prompt template simple).
+- **Which additional lm-eval tasks** to register next (subjects / suites) — each should stay a cheap registry addition.

@@ -16,7 +16,7 @@ Full design doc: `docs/PROJECT_PLAN.md`. Read it before large changes.
 - Backend: FastAPI + asyncio, Python 3.11+. Background work via FastAPI `BackgroundTasks` (no Celery/Redis).
 - Frontend: Next.js (App Router) + Recharts. Talks to backend via HTTP polling (no WebSockets).
 - Storage: stdlib `sqlite3`, no ORM. Tables: runs, responses, scores.
-- Datasets: Hugging Face `datasets` with default local caching (no streaming mode). Public/ungated only — no HF token.
+- Datasets: Hugging Face `datasets` with default local caching (no streaming mode) for judge tests (TruthfulQA). Deterministic benchmarks load questions via lm-evaluation-harness task definitions (`dataset_source="lm_eval"`). Public/ungated only — no HF token. DeepEval deferred.
 - No Docker. Entry point is `run.sh` (uv-managed root-level venv for backend, npm for frontend).
 - Reproducibility: temperature 0 for all benchmark generation. Record model tag, quantization, prompt-template version, and decoding params with every run.
 - Tests: pytest for allocator math, scorers, and provider interface. Keep scorers pure/testable without a live model.
@@ -28,7 +28,7 @@ backend/app/
   core/         # providers.py, hardware.py, config
   database/     # sqlite3 helpers
   registry/     # test definitions + prompt templates
-  scorers/      # deterministic/, judge/
+  scorers/      # deterministic/, judge/, integrations/ (lm-eval adapters)
   evaluations/  # allocator.py, two-pass run orchestration
   router/       # FastAPI endpoints
 frontend/       # Next.js app + components
