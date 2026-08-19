@@ -34,6 +34,25 @@ class Settings:
     DEFAULT_MODEL: str = field(
         default_factory=lambda: os.environ.get("DEFAULT_MODEL", _defaults["default_model"])
     )
+    DB_PATH: Path = field(
+        default_factory=lambda: Path(
+            os.environ.get("DB_PATH", str(_CONFIG_PATH.parent / _defaults["db_path"]))
+        )
+    )
+    OLLAMA_REQUEST_TIMEOUT_SECONDS: float = field(
+        default_factory=lambda: float(
+            os.environ.get(
+                "OLLAMA_REQUEST_TIMEOUT_SECONDS", _defaults["ollama_request_timeout_seconds"]
+            )
+        )
+    )
+    OLLAMA_MAX_CONCURRENT_REQUESTS: int = field(
+        default_factory=lambda: int(
+            os.environ.get(
+                "OLLAMA_MAX_CONCURRENT_REQUESTS", _defaults["ollama_max_concurrent_requests"]
+            )
+        )
+    )
 
     @property
     def cors_origin(self) -> str:

@@ -2,5 +2,8 @@
   "ollama_base_url": "http://localhost:11434",
   "backend_port": 8000,
   "frontend_port": 3000,
-  "default_model": "llama3.2:latest"
+  "default_model": "llama3.2:latest",
+  "db_path": "data/llm_litmus.db",
+  "ollama_request_timeout_seconds": 300,
+  "ollama_max_concurrent_requests": 3
 }

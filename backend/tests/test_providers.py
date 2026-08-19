@@ -6,7 +6,9 @@ import pytest
 from app.core.providers import (
     GenerationResult,
     LocalOllamaProvider,
+    ModelInfo,
     OllamaModelNotFoundError,
+    OllamaTimeoutError,
     OllamaUnreachableError,
     SpeedResult,
 )
@@ -62,8 +64,59 @@ def test_generate_response_ollama_unreachable():
         asyncio.run(_provider().generate_response("llama3:8b", "hi"))
 
 
+def test_generate_response_timeout_raises_distinct_error():
+    mock_post = AsyncMock(side_effect=httpx.ReadTimeout("timed out"))
+    with patch("httpx.AsyncClient.post", mock_post), pytest.raises(OllamaTimeoutError) as excinfo:
+        asyncio.run(_provider().generate_response("deepseek-r1:1.5b", "hi"))
+
+    assert "deepseek-r1:1.5b" in str(excinfo.value)
+    assert "Is it running" not in str(excinfo.value)
+
+
 def test_generate_response_model_not_found():
     err_json = {"error": "model 'nope:8b' not found, try pulling it first"}
     mock_post = AsyncMock(return_value=_mock_response(404, err_json))
     with patch("httpx.AsyncClient.post", mock_post), pytest.raises(OllamaModelNotFoundError):
         asyncio.run(_provider().generate_response("nope:8b", "hi"))
+
+
+def test_get_model_info_success():
+    # Real /api/show response shape, confirmed live against a locally pulled model
+    # (docs/implementation-log.md) -- trimmed to the fields get_model_info actually reads.
+    ollama_json = {
+        "details": {
+            "parent_model": "",
+            "format": "gguf",
+            "family": "llama",
+            "families": ["llama"],
+            "parameter_size": "3.2B",
+            "quantization_level": "Q4_K_M",
+        },
+    }
+    with patch("httpx.AsyncClient.post", AsyncMock(return_value=_mock_response(200, ollama_json))):
+        result = asyncio.run(_provider().get_model_info("llama3.2:latest"))
+
+    assert isinstance(result, ModelInfo)
+    assert result.quantization_level == "Q4_K_M"
+    assert result.parameter_size == "3.2B"
+
+
+def test_get_model_info_model_not_found():
+    err_json = {"error": "model 'nope:8b' not found"}
+    mock_post = AsyncMock(return_value=_mock_response(404, err_json))
+    with patch("httpx.AsyncClient.post", mock_post), pytest.raises(OllamaModelNotFoundError):
+        asyncio.run(_provider().get_model_info("nope:8b"))
+
+
+def test_get_model_info_timeout_raises_distinct_error():
+    mock_post = AsyncMock(side_effect=httpx.ReadTimeout("timed out"))
+    with patch("httpx.AsyncClient.post", mock_post), pytest.raises(OllamaTimeoutError):
+        asyncio.run(_provider().get_model_info("deepseek-r1:1.5b"))
+
+
+def test_connect_error_still_raises_unreachable_not_timeout():
+    # Regression check: a genuine connection failure (Ollama actually down) must stay
+    # OllamaUnreachableError, not get swept up by the new OllamaTimeoutError handling.
+    mock_post = AsyncMock(side_effect=httpx.ConnectError("refused"))
+    with patch("httpx.AsyncClient.post", mock_post), pytest.raises(OllamaUnreachableError):
+        asyncio.run(_provider().generate_response("llama3:8b", "hi"))

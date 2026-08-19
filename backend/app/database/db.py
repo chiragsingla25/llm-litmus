@@ -1,0 +1,144 @@
+"""sqlite3 connection, init, and CRUD helpers. No ORM, per CLAUDE.md."""
+
+import json
+import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
+from pathlib import Path
+
+from app.database.schema import SCHEMA_SQL
+
+
+@contextmanager
+def get_connection(db_path: Path) -> Iterator[sqlite3.Connection]:
+    db_path = Path(db_path)
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    try:
+        yield conn
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def init_db(conn: sqlite3.Connection) -> None:
+    conn.executescript(SCHEMA_SQL)
+
+
+def create_run(
+    conn: sqlite3.Connection,
+    *,
+    test_id: str,
+    target_model: str,
+    prompt_template_version: str,
+    sample_size: int | None = None,
+    target_quantization: str | None = None,
+    judge_model: str | None = None,
+    judge_quantization: str | None = None,
+    temperature: float = 0.0,
+    status: str = "pending",
+) -> int:
+    cursor = conn.execute(
+        "INSERT INTO runs (test_id, target_model, target_quantization, judge_model, "
+        "judge_quantization, prompt_template_version, temperature, sample_size, status) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            test_id,
+            target_model,
+            target_quantization,
+            judge_model,
+            judge_quantization,
+            prompt_template_version,
+            temperature,
+            sample_size,
+            status,
+        ),
+    )
+    return cursor.lastrowid
+
+
+def update_run_status(
+    conn: sqlite3.Connection, run_id: int, status: str, *, error: str | None = None
+) -> None:
+    conn.execute(
+        "UPDATE runs SET status = ?, error = ?, updated_at = datetime('now') WHERE id = ?",
+        (status, error, run_id),
+    )
+
+
+def get_run(conn: sqlite3.Connection, run_id: int) -> sqlite3.Row | None:
+    return conn.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
+
+
+def record_run_quantization(
+    conn: sqlite3.Connection,
+    run_id: int,
+    *,
+    target_quantization: str | None = None,
+    judge_quantization: str | None = None,
+) -> None:
+    """Records the quantization Ollama already reports for each model (via get_model_info's
+    POST /api/show) onto the run row. Models are pre-quantized at `ollama pull` time -- this
+    only backfills metadata for reproducibility, it never selects, requests, or applies a
+    quantization level."""
+    conn.execute(
+        "UPDATE runs SET target_quantization = ?, judge_quantization = ? WHERE id = ?",
+        (target_quantization, judge_quantization, run_id),
+    )
+
+
+def record_run_sample_size(conn: sqlite3.Connection, run_id: int, sample_size: int) -> None:
+    """Backfills the actual number of items processed, once known. `create_run`'s sample_size
+    may be unknown (NULL) at creation time if the caller didn't specify one, meaning "use the
+    full test" -- this records what that actually resolved to."""
+    conn.execute("UPDATE runs SET sample_size = ? WHERE id = ?", (sample_size, run_id))
+
+
+def insert_response(
+    conn: sqlite3.Connection,
+    *,
+    run_id: int,
+    item_index: int,
+    prompt: str,
+    response_text: str,
+    gold_reference: dict,
+) -> int:
+    cursor = conn.execute(
+        "INSERT INTO responses (run_id, item_index, prompt, response_text, gold_reference) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (run_id, item_index, prompt, response_text, json.dumps(gold_reference)),
+    )
+    return cursor.lastrowid
+
+
+def get_responses_for_run(conn: sqlite3.Connection, run_id: int) -> list[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM responses WHERE run_id = ? ORDER BY item_index", (run_id,)
+    ).fetchall()
+
+
+def insert_score(
+    conn: sqlite3.Connection,
+    *,
+    response_id: int,
+    scorer_version: str,
+    score: float | None,
+    passed: bool | None,
+    rationale: str | None = None,
+    raw_judge_output: str | None = None,
+) -> int:
+    cursor = conn.execute(
+        "INSERT INTO scores (response_id, scorer_version, score, passed, rationale, "
+        "raw_judge_output) VALUES (?, ?, ?, ?, ?, ?)",
+        (
+            response_id,
+            scorer_version,
+            score,
+            None if passed is None else int(passed),
+            rationale,
+            raw_judge_output,
+        ),
+    )
+    return cursor.lastrowid
