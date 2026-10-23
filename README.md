@@ -2,9 +2,6 @@
 
 **A litmus test for your local LLMs.** Benchmark any Ollama model on your own machine — no API keys, no accounts, no cloud, no Docker. Clone, run one script, get scores.
 
-<!-- DEMO GIF GOES HERE (Phase 5): terminal `./run.sh` → dashboard opens → test runs → radar chart -->
-<!-- ![demo](docs/demo.gif) -->
-
 ## What it does
 
 Point llm-litmus at a local model and it runs a curated set of benchmark tests, scored two ways:
